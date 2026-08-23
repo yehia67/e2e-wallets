@@ -4,7 +4,16 @@ Thanks for considering it — this project is early and could genuinely use help
 
 ## Getting set up
 
-See the [Quick start](./README.md#quick-start) in the README — `pnpm install`, `pnpm build:leather`, `pnpm build`, `pnpm test`. If those four commands don't get you to a passing test suite on a clean checkout, that's a bug in this project (or its docs) — please open an issue.
+```bash
+git clone https://github.com/yehia67/e2e-wallets.git
+cd e2e-wallets
+pnpm install
+pnpm build:leather   # builds the real Leather extension from source (idempotent)
+pnpm build
+pnpm test            # launches a real Chromium window and drives it -- expect a browser popup
+```
+
+If those don't get you to a passing test suite on a clean checkout, that's a bug in this project (or its docs) — please open an issue.
 
 ## How the project is structured
 
