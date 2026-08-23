@@ -1,0 +1,24 @@
+{
+  "name": "@stacks-wallet/example-react-connect",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal React app with a single 'Connect Wallet' button — a real target for testing Leather's connection flow against, once WalletDriver#connectToDapp lands. Not itself part of the WalletDriver package.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@stacks/connect": "^8.2.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "^5.6.3",
+    "vite": "^8.2.2"
+  }
+}

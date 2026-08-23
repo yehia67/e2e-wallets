@@ -11,6 +11,9 @@ wallets/*/dist/
 wallets/*/build/
 wallets/*/.*-source/
 
+# Example app build output
+examples/*/dist/
+
 # Playwright output
 test-results/
 playwright-report/
