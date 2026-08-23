@@ -1,0 +1,25 @@
+node_modules/
+.cache/
+.turbo/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Built wallet extensions (fetched/built by setup scripts, not committed)
+wallets/*/dist/
+wallets/*/build/
+wallets/*/.*-source/
+
+# Playwright output
+test-results/
+playwright-report/
+blob-report/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Internal planning tooling — not relevant to contributors, not part of the public project history
+_bmad/
+_bmad-output/
+.claude/
