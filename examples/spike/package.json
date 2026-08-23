@@ -1,5 +1,5 @@
 {
-  "name": "@stacks-wallet/example-spike",
+  "name": "@wallets-e2e/example-spike",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@playwright/test": "^1.47.0",
-    "@stacks-wallet/core": "workspace:*",
-    "@stacks-wallet/leather": "workspace:*"
+    "@wallets-e2e/core": "workspace:*",
+    "@wallets-e2e/leather": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

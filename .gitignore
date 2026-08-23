@@ -11,6 +11,10 @@ wallets/*/dist/
 wallets/*/build/
 wallets/*/.*-source/
 
+# Compiled npm package output (real build, per Story 1.5 -- publish it, don't commit it)
+packages/*/dist/
+wallets/*/lib/
+
 # Example app build output
 examples/*/dist/
 

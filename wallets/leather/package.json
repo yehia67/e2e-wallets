@@ -1,24 +1,37 @@
 {
-  "name": "@stacks-wallet/leather",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@wallets-e2e/leather",
+  "version": "0.1.0",
   "type": "module",
   "description": "WalletDriver adapter for the real Leather browser extension, built from source (leather-io/extension).",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "license": "MIT",
+  "main": "./lib/src/index.js",
+  "types": "./lib/src/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./fixtures/devnet-wallet.js": "./fixtures/devnet-wallet.ts"
+    ".": {
+      "types": "./lib/src/index.d.ts",
+      "default": "./lib/src/index.js"
+    },
+    "./fixtures/wallet.js": {
+      "types": "./lib/fixtures/wallet.d.ts",
+      "default": "./lib/fixtures/wallet.js"
+    }
   },
+  "files": [
+    "lib"
+  ],
   "scripts": {
-    "build": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:extension": "bash ./scripts/build-extension.sh"
   },
   "dependencies": {
-    "@playwright/test": "^1.47.0",
-    "@stacks-wallet/core": "workspace:*"
+    "@wallets-e2e/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@playwright/test": "^1.47.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.47.0",
     "typescript": "^5.6.3",
     "@types/node": "^22.7.5",
     "@types/chrome": "^0.2.7"

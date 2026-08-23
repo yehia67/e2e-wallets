@@ -1,6 +1,6 @@
-import type { BrowserContext, WalletAccount, WalletDriver } from '@stacks-wallet/core';
-import { resolveExtensionId } from '@stacks-wallet/core';
-import { devnetWallet } from '../fixtures/devnet-wallet.js';
+import type { BrowserContext, WalletAccount, WalletDriver } from '@wallets-e2e/core';
+import { resolveExtensionId } from '@wallets-e2e/core';
+import { wallet } from '../fixtures/wallet.js';
 
 /**
  * WalletDriver adapter for the real Leather extension (AD-2). Only `importWallet` is implemented
@@ -67,7 +67,7 @@ export const leatherDriver: WalletDriver = {
     // Set-password screen: single <input name="password">. Continue stays disabled until the
     // strength meter clears "Poor" — the fixture password (AD-5) is chosen to satisfy this.
     await page.waitForURL(/#\/set-password/, { timeout: 10_000 });
-    await page.locator('input[name="password"]').fill(devnetWallet.password);
+    await page.locator('input[name="password"]').fill(wallet.password);
     const continueBtn = page.getByRole('button', { name: /^continue$/i });
     await page.waitForFunction(
       () => {
@@ -87,14 +87,39 @@ export const leatherDriver: WalletDriver = {
     // via its service worker, rather than trusting that the flow above "must have worked."
     const storage = (await worker.evaluate(() => chrome.storage.local.get(null))) as Record<string, unknown>;
     const json = JSON.stringify(storage);
-    const found = json.includes(devnetWallet.mainnetAddress);
+    const found = json.includes(wallet.mainnetAddress);
     if (!found) {
       throw new Error(
-        `[wallets/leather] Unlocked, but expected address ${devnetWallet.mainnetAddress} was not found in Leather's persisted storage — import likely failed silently.`,
+        `[wallets/leather] Unlocked, but expected address ${wallet.mainnetAddress} was not found in Leather's persisted storage — import likely failed silently.`,
       );
     }
 
-    return { address: devnetWallet.mainnetAddress };
+    return { address: wallet.mainnetAddress };
+  },
+
+  async switchToTestnetNetwork(context: BrowserContext): Promise<void> {
+    // Real discovery (Story 1.4): Leather defaults to mainnet regardless of what network the
+    // dapp/RPC call names — a transfer request against an account Leather thinks is on mainnet
+    // (0 balance there) crashes Leather's own fee-estimation step outright ("Error generating
+    // unsigned stacks transaction"), rather than failing gracefully. The wallet's own active
+    // network must be switched first. (A local Clarinet devnet network was tried first and
+    // dropped — two independent, real Clarinet 3.23.1 bugs made it unusable; Leather's built-in
+    // "Testnet4" preset, `api.testnet.hiro.so`, is used instead.)
+    const page = context.pages().find((p) => p.url().startsWith('chrome-extension://') && p.url().includes('index.html'));
+    if (!page) {
+      throw new Error('[wallets/leather] switchToTestnetNetwork: no open Leather dashboard page found — call importWallet first.');
+    }
+
+    // The header's settings menu trigger has no stable testid/aria-label (icon-only button) — it
+    // is reliably the first `aria-haspopup="menu"` button in DOM order (a second, unrelated one
+    // exists further down for "Collectibles").
+    await page.locator('button[aria-haspopup="menu"]').first().click();
+    await page.locator('[data-testid="settings-change-network"]').click();
+    await page.locator('[data-testid="testnet4"]').click();
+
+    // Real signal: the dashboard's balance display updates once Leather has actually queried the
+    // selected network — never trust "the menu closed" as proof the switch took effect.
+    await page.getByText(/^testnet4$/i).waitFor({ state: 'visible', timeout: 10_000 });
   },
 
   async connectToDapp(context: BrowserContext, trigger: () => Promise<void>): Promise<void> {
@@ -143,11 +168,12 @@ export const leatherDriver: WalletDriver = {
       );
     }
 
-    // Real approval screen, verified by inspection: "SIGN MESSAGE" / "Cancel" / "Sign", no stable
-    // data-testid on this screen (unlike get-addresses) — "Sign" is still an exact, unique match.
-    const signBtn = popup.getByRole('button', { name: /^sign$/i });
-    await signBtn.waitFor({ state: 'visible', timeout: 10_000 });
-    await signBtn.click();
+    // Real approval screen, verified by inspection: "SIGN MESSAGE" screen uses a "Sign" button;
+    // "SEND TOKEN" (a real transfer) uses "Approve" instead — neither has a stable data-testid
+    // (unlike get-addresses), so match either exact label.
+    const confirmBtn = popup.getByRole('button', { name: /^(sign|approve)$/i });
+    await confirmBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await confirmBtn.click();
 
     // Same driver-scope success signal as connectToDapp (AD-8): popup must close cleanly.
     await popup.waitForEvent('close', { timeout: 10_000 });

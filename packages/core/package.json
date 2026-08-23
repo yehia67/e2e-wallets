@@ -1,18 +1,29 @@
 {
-  "name": "@stacks-wallet/core",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@wallets-e2e/core",
+  "version": "0.1.0",
   "type": "module",
   "description": "Shared context-launch and extension-ID-resolution machinery every wallet driver in this monorepo builds on.",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "scripts": {
-    "build": "tsc --noEmit -p tsconfig.json"
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "dependencies": {
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "peerDependencies": {
     "@playwright/test": "^1.47.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.47.0",
     "@types/node": "^22.7.5",
     "@types/chrome": "^0.2.7",
     "typescript": "^5.6.3"
