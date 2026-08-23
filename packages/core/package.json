@@ -1,9 +1,29 @@
 {
   "name": "@wallets-e2e/core",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "Shared context-launch and extension-ID-resolution machinery every wallet driver in this monorepo builds on.",
+  "keywords": [
+    "playwright",
+    "stacks",
+    "bitcoin",
+    "leather",
+    "wallet",
+    "e2e",
+    "blockchain",
+    "web3",
+    "browser-extension"
+  ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yehia67/e2e-wallets.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/yehia67/e2e-wallets/issues"
+  },
+  "homepage": "https://github.com/yehia67/e2e-wallets#readme",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

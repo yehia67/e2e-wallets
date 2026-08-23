@@ -120,8 +120,8 @@ await request('stx_callContract', {
 ## Setup
 
 ```bash
-git clone <this-repo-url>
-cd wallets-e2e
+git clone https://github.com/yehia67/e2e-wallets.git
+cd e2e-wallets
 pnpm install
 pnpm build:leather   # builds the real Leather extension from source (idempotent)
 pnpm build
@@ -135,7 +135,11 @@ node examples/react-connect/scripts/fund-fixture-wallet-testnet.mjs
 node scripts/deploy-counter-testnet.mjs   # one-time: deploys the example contract the contract-call test calls
 ```
 
-**Not yet published to npm** — `packages/core`/`wallets/leather` build real, publishable output (`npm pack --dry-run` in either confirms it), but the actual `npm publish` step is a manual one only the maintainer's own npm account can do. Until then, use this as a local dependency — `git clone` this repo and reference `packages/core` / `wallets/leather` via a workspace or `file:` path, the way `examples/react-connect` does (`"@wallets-e2e/core": "workspace:*"`).
+```bash
+npm install --save-dev @wallets-e2e/core @wallets-e2e/leather
+```
+
+[`@wallets-e2e/core`](https://www.npmjs.com/package/@wallets-e2e/core) is published. [`@wallets-e2e/leather`](https://www.npmjs.com/package/@wallets-e2e/leather) is on its way — if it's not live yet, `git clone` this repo and reference `packages/core` / `wallets/leather` via a workspace or `file:` path instead, the way `examples/react-connect` does (`"@wallets-e2e/core": "workspace:*"`).
 
 ## The one thing to get right in your own dapp: picking the Stacks address
 

@@ -28,8 +28,8 @@ A local Clarinet devnet was tried first and dropped: two independent, real Clari
 ## Quick start
 
 ```bash
-git clone <this-repo-url>
-cd wallets-e2e
+git clone https://github.com/yehia67/e2e-wallets.git
+cd e2e-wallets
 
 # 1. Install workspace dependencies
 pnpm install
@@ -127,6 +127,16 @@ test('connects to my dapp', async () => {
 ```
 
 See [`tutorials/quick-start.md`](./tutorials/quick-start.md) for signing, transferring, and calling a contract on top of this.
+
+## Using this with an AI coding agent
+
+[`claude-skill/wallets-e2e/`](./claude-skill/wallets-e2e/) is a [Claude Code](https://claude.com/claude-code) Skill teaching an agent how to use this package correctly in its own workflow — the real API surface, a working example, and every real gotcha this project's own test suite actually hit (the 34-byte memo limit, the deprecated `signMessage()`, the "Sign" vs "Approve" button label). It's not published inside the npm packages themselves (`files` only ships compiled `dist`/`lib`) — copy it from a checkout of this repo into any project that depends on `@wallets-e2e/core`/`@wallets-e2e/leather`:
+
+```bash
+cp -R /path/to/wallets-e2e/claude-skill/wallets-e2e /path/to/your/project/.claude/skills/wallets-e2e
+```
+
+An MCP server (so an agent can drive a real wallet directly as a tool call, not just write Playwright code from the skill's guidance) is a planned, separate, bigger follow-up — not built yet.
 
 ## Fixture wallet and bringing your own account
 

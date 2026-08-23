@@ -5,10 +5,19 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yehia67/e2e-wallets.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yehia67/e2e-wallets/issues"
+  },
+  "homepage": "https://github.com/yehia67/e2e-wallets#readme",
   "packageManager": "pnpm@9.11.0",
   "keywords": [
     "playwright",
     "stacks",
+    "bitcoin",
     "xverse",
     "leather",
     "wallet",
