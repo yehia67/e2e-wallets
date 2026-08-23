@@ -1,9 +1,18 @@
 {
   "name": "@wallets-e2e/leather",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "WalletDriver adapter for the real Leather browser extension, built from source (leather-io/extension).",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yehia67/e2e-wallets.git",
+    "directory": "wallets/leather"
+  },
+  "bugs": {
+    "url": "https://github.com/yehia67/e2e-wallets/issues"
+  },
+  "homepage": "https://github.com/yehia67/e2e-wallets#readme",
   "main": "./lib/src/index.js",
   "types": "./lib/src/index.d.ts",
   "exports": {
