@@ -1,44 +1,43 @@
 # Quick Start: testing your Stacks dapp against a real Leather wallet
 
-`playwright-stacks-wallet` lets you drive a **real** Leather browser extension from a Playwright test against your own dapp — real unlock, and soon real connection-approval and real transaction-signing, no mocked wallet object standing in for the real thing. Nothing like this existed for Stacks wallets before.
+`playwright-stacks-wallet` lets you drive a **real** Leather browser extension from a Playwright test against your own dapp — real unlock, real connection-approval, real transaction-signing, no mocked wallet object standing in for the real thing. Nothing like this existed for Stacks wallets before.
 
-**Honest status up front:** unlocking a wallet works today, end to end, against the real extension. Connecting to a dapp and signing a transaction are designed (the interface exists) but not implemented yet — see [What's not here yet](#whats-not-here-yet) below. This tutorial shows you exactly what you can rely on right now.
+**Honest status up front:** unlocking a wallet, connecting to a dapp, and signing a message all work today, end to end, against the real extension. Broadcasting a real on-chain transaction and Xverse support are not implemented yet — see [What's not here yet](#whats-not-here-yet) below.
 
-## What you'll be able to test, once this reaches your dapp
-
-Picture a staking dapp with three buttons — *Connect Wallet*, *Approve*, *Stake* — the same shape as any typical Web3 frontend. The eventual goal is a test file for that dapp that looks roughly like this:
+## A real, working example
 
 ```ts
 import { test, expect } from '@playwright/test';
-import { launchContext } from '@stacks-wallet/core';
+import { launchContext, resolveExtensionId, selectWalletInStacksConnectModal } from '@stacks-wallet/core';
 import { leatherDriver } from '@stacks-wallet/leather';
-import { devnetWallet } from './fixtures/my-test-wallet';
+import { devnetWallet } from '@stacks-wallet/leather/fixtures/devnet-wallet.js';
 
-test('user connects, approves, and stakes', async () => {
+test('user connects and signs a message', async () => {
   const context = await launchContext({ extensionPath: LEATHER_DIST, userDataDir, recordVideoDir });
   const page = await context.newPage();
   await page.goto('http://localhost:3000'); // your dapp, running locally
 
   await leatherDriver.importWallet(context, devnetWallet.seedPhrase);
 
-  await page.getByRole('button', { name: 'Connect Wallet' }).click();
-  await leatherDriver.connectToDapp(context, async () => {}); // approves in the real popup
+  // `trigger` is every dapp-side click needed to reach the real popup — yours to write, since
+  // only you know your dapp's buttons. `@stacks/connect`'s own wallet-picker modal (not any
+  // wallet's own UI) is handled by the shared `selectWalletInStacksConnectModal` helper.
+  await leatherDriver.connectToDapp(context, async () => {
+    await page.getByRole('button', { name: 'Connect Wallet' }).click();
+    await selectWalletInStacksConnectModal(page, 'Leather');
+  });
 
-  await page.getByRole('button', { name: 'Approve' }).click();
-  await leatherDriver.confirmTransaction(context, async () => {});
+  await leatherDriver.confirmTransaction(context, async () => {
+    await page.getByRole('button', { name: 'Sign Message' }).click();
+  });
 
-  await page.getByRole('button', { name: 'Stake' }).click();
-  await leatherDriver.confirmTransaction(context, async () => {});
-
-  await expect(page.getByText('Staked successfully')).toBeVisible();
+  await expect(page.getByText(/signature/i)).toBeVisible();
 });
 ```
 
-That's the destination — a normal-looking Playwright test where your dapp's own buttons drive a real wallet popup, no mocking. The two `confirmTransaction`/`connectToDapp` calls in that example are not real yet (see below); everything else is.
+Not hypothetical — this is (lightly trimmed) the actual test in `examples/react-connect/tests/`, running against a real minimal dapp in this repo, against the real Leather extension, today. Both `examples/spike` (unlock only) and `examples/react-connect` (unlock + connect + sign) have real, passing test suites — go read them for the full, current reference rather than trusting this tutorial to stay perfectly in sync.
 
-## What actually works today
-
-The one thing you can rely on right now: launching a real, source-built Leather extension in a Playwright context and unlocking it with a wallet you control. That's useful on its own — it's the foundation every dapp-connection test will sit on top of, and it already proves the hard part (driving a real extension popup with Playwright) works.
+## Setup
 
 ```bash
 git clone <this-repo-url>
@@ -46,42 +45,20 @@ cd playwright-stacks-wallet
 pnpm install
 pnpm build:leather   # builds the real Leather extension from source (idempotent)
 pnpm build
+pnpm test            # runs every real test across every example package
 ```
 
-A minimal test using this project's real, working API:
+**Not published to npm yet** (see [Story 1.5](../_bmad-output/planning-artifacts/epics.md) if you're curious about the plan). Until it is, use this as a local dependency — `git clone` this repo and reference `packages/core` / `wallets/leather` via a workspace or `file:` path, the way `examples/react-connect` does (`"@stacks-wallet/core": "workspace:*"`).
+
+## The one thing to get right in your own dapp: picking the Stacks address
+
+`@stacks/connect`'s `getAddresses` result (what `connect()` resolves to) returns **multiple** addresses — typically two Bitcoin formats plus one Stacks address, in no guaranteed order. This project's own example app got this wrong at first: `response.addresses[0]` silently picked a Bitcoin address, and only a real test run (not a code review) caught it. Always filter explicitly:
 
 ```ts
-import { existsSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { test, expect } from '@playwright/test';
-import { launchContext, resolveExtensionId } from '@stacks-wallet/core';
-import { leatherDriver } from '@stacks-wallet/leather';
-
-const LEATHER_DIST = join(__dirname, 'node_modules/@stacks-wallet/leather/dist');
-
-test('unlocks a real Leather wallet', async () => {
-  const context = await launchContext({
-    extensionPath: LEATHER_DIST,
-    userDataDir: mkdtempSync(join(tmpdir(), 'my-dapp-tests-')),
-    recordVideoDir: join(__dirname, 'test-results/videos'),
-  });
-
-  const extensionId = await resolveExtensionId(context);
-  expect(extensionId).toBeTruthy();
-
-  // Use your OWN devnet-only fixture wallet here — never a real one. See "Write your own
-  // fixture wallet" below for how this project's own fixture was generated and verified.
-  const account = await leatherDriver.importWallet(context, MY_DEVNET_SEED_PHRASE);
-  expect(account.address).toBe(MY_EXPECTED_MAINNET_ADDRESS);
-
-  await context.close();
-});
+const stxAddress = response.addresses.find((a) => a.symbol === 'STX')?.address ?? null;
 ```
 
-This is not hypothetical — it's the same pattern `examples/spike/tests/1-1-load-and-unlock.spec.ts` in this repo runs for real, today, against the real extension (video-recorded, 3 passing tests including two real failure-mode checks). Go read that file for the actual, currently-working reference.
-
-**Not published to npm yet.** Until it is, use it as a local dependency — `git clone` this repo and reference `packages/core` / `wallets/leather` via a `file:` or workspace path, the same way this repo's own `examples/spike` package does (`"@stacks-wallet/core": "workspace:*"`).
+Also: `@stacks/connect`'s exported `signMessage()` function is **deprecated and a no-op** — it does nothing at all. Use the generic RPC call instead: `request('stx_signMessage', { message })`, which resolves to `{ signature, publicKey }`.
 
 ## Write your own fixture wallet
 
@@ -100,13 +77,12 @@ const { getAddressFromPrivateKey } = require('@stacks/transactions');
 "
 ```
 
-`wallets/leather/fixtures/devnet-wallet.ts` in this repo shows the real pattern, including why the address it asserts against is the *mainnet*-form one — Leather's own persisted state surfaces that form, not the devnet/testnet one, which only became clear by actually inspecting a real unlocked wallet's storage rather than assuming.
+`wallets/leather/fixtures/devnet-wallet.ts` in this repo shows the real pattern, including why the address it asserts against is the *mainnet*-form one — Leather's own persisted state surfaces that form, not the devnet/testnet one, which only became clear by actually inspecting a real unlocked wallet's storage rather than assuming. It also documents a real, separate gotcha: Leather enforces a minimum password-strength meter during setup — a weak password leaves its own "Continue" button permanently disabled.
 
 ## What's not here yet
 
-- **`connectToDapp`** — approving a dapp's connection request in the real popup. The interface exists (`packages/core`'s `WalletDriver`); the implementation throws `not implemented`.
-- **`confirmTransaction`** — approving a signature/transaction request. Same status.
-- **An example dapp page** to test against — this repo currently drives Leather's own onboarding screens directly, not a third-party page. Testing *your* dapp means pointing `page.goto()` at wherever your dapp runs locally, the way the illustrative example above does — that part already works, it's the wallet-side `connectToDapp`/`confirmTransaction` calls that don't yet.
+- **Broadcasting and confirming a real on-chain transaction** (vs. signing a plain message) — the popup-approval mechanism (`confirmTransaction`) is proven and identical either way, but no test here submits an actual devnet transaction yet.
 - **Xverse support** — Leather only, for now.
+- **Published npm package** — clone-and-workspace-link only, see Setup above.
 
-If you need connection/signing testing today, you'll need to implement those two `WalletDriver` methods yourself against your fork — `wallets/leather/src/index.ts`'s `importWallet` is a real, working reference for the pattern (inspect the real popup UI first, never guess selectors; verify success against a real signal, never trust "the click didn't error"). Contributions finishing this are very welcome — see `CONTRIBUTING.md`.
+Contributions on any of these are very welcome — see `CONTRIBUTING.md`.

@@ -3,11 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Minimal React app with a single 'Connect Wallet' button — a real target for testing Leather's connection flow against, once WalletDriver#connectToDapp lands. Not itself part of the WalletDriver package.",
+  "description": "Minimal React app with a single 'Connect Wallet' button, real @stacks/connect underneath — the target app wallets/leather's connectToDapp is proven against.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "playwright test"
   },
   "dependencies": {
     "@stacks/connect": "^8.2.7",
@@ -15,6 +16,11 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@stacks-wallet/core": "workspace:*",
+    "@stacks-wallet/leather": "workspace:*",
+    "@types/chrome": "^0.2.7",
+    "@types/node": "^22.7.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",

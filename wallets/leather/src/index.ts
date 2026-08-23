@@ -1,4 +1,5 @@
 import type { BrowserContext, WalletAccount, WalletDriver } from '@stacks-wallet/core';
+import { resolveExtensionId } from '@stacks-wallet/core';
 import { devnetWallet } from '../fixtures/devnet-wallet.js';
 
 /**
@@ -96,11 +97,59 @@ export const leatherDriver: WalletDriver = {
     return { address: devnetWallet.mainnetAddress };
   },
 
-  async connectToDapp(): Promise<void> {
-    throw new Error('[wallets/leather] connectToDapp not implemented — Story 1.2');
+  async connectToDapp(context: BrowserContext, trigger: () => Promise<void>): Promise<void> {
+    // `trigger` is entirely the caller's job (Story 1.1 Design Notes / AD-2): it must perform
+    // every dapp-side click needed to reach a real extension popup — e.g. clicking the dapp's own
+    // "Connect Wallet" button AND, since @stacks/connect shows its own in-page multi-wallet picker
+    // first (plain DOM, not shadow-root — verified by inspection), the picker's "Connect" button
+    // for Leather specifically. Which wallet to pick in that generic picker is the caller's
+    // knowledge, not this driver's — the picker isn't Leather's UI at all.
+    const extensionId = await resolveExtensionId(context);
+    const popupPromise = context.waitForEvent('page', { timeout: 10_000 });
+    await trigger();
+    const popup = await popupPromise;
+
+    // Origin-verify per AD-3 before interacting — never trust "a page opened" alone.
+    if (!popup.url().startsWith(`chrome-extension://${extensionId}/popup.html`)) {
+      throw new Error(
+        `[wallets/leather] connectToDapp: expected a Leather popup, got "${popup.url()}" — trigger() likely didn't reach Leather's approval popup.`,
+      );
+    }
+
+    // Real approval screen, verified by inspection: "CONNECT APP" / account selector / Deny /
+    // Confirm, with a stable data-testid on the approve button.
+    const approveBtn = popup.locator('[data-testid="get-addresses-approve-button"]');
+    await approveBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await approveBtn.click();
+
+    // Success signal within this driver's own scope (it never sees the dapp page — the dapp's own
+    // test asserts the connected address landed there, per AD-8's fuller intent): the popup must
+    // close cleanly after Confirm, not hang or error. A Deny click, or the popup staying open,
+    // both fail this wait rather than being mistaken for success.
+    await popup.waitForEvent('close', { timeout: 10_000 });
   },
 
-  async confirmTransaction(): Promise<void> {
-    throw new Error('[wallets/leather] confirmTransaction not implemented — Story 1.3');
+  async confirmTransaction(context: BrowserContext, trigger: () => Promise<void>): Promise<void> {
+    // Same shape as connectToDapp: trigger performs every dapp-side action needed to reach the
+    // real popup (e.g. clicking a "Sign Message" button that calls @stacks/connect's request()).
+    const extensionId = await resolveExtensionId(context);
+    const popupPromise = context.waitForEvent('page', { timeout: 10_000 });
+    await trigger();
+    const popup = await popupPromise;
+
+    if (!popup.url().startsWith(`chrome-extension://${extensionId}/popup.html`)) {
+      throw new Error(
+        `[wallets/leather] confirmTransaction: expected a Leather popup, got "${popup.url()}" — trigger() likely didn't reach Leather's approval popup.`,
+      );
+    }
+
+    // Real approval screen, verified by inspection: "SIGN MESSAGE" / "Cancel" / "Sign", no stable
+    // data-testid on this screen (unlike get-addresses) — "Sign" is still an exact, unique match.
+    const signBtn = popup.getByRole('button', { name: /^sign$/i });
+    await signBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await signBtn.click();
+
+    // Same driver-scope success signal as connectToDapp (AD-8): popup must close cleanly.
+    await popup.waitForEvent('close', { timeout: 10_000 });
   },
 };

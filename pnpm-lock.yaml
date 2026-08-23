@@ -27,6 +27,21 @@ importers:
         specifier: ^19.2.8
         version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@playwright/test':
+        specifier: ^1.47.0
+        version: 1.62.1
+      '@stacks-wallet/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@stacks-wallet/leather':
+        specifier: workspace:*
+        version: link:../../wallets/leather
+      '@types/chrome':
+        specifier: ^0.2.7
+        version: 0.2.7
+      '@types/node':
+        specifier: ^22.7.5
+        version: 22.20.1
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18

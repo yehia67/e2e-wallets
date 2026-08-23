@@ -6,7 +6,7 @@ Playwright commands and fixtures for driving **real** Stacks wallet browser exte
 
 ## Status
 
-Early / pre-alpha. One proving flow exists so far: launch a real, source-built Leather extension in a Playwright-controlled browser, unlock it with a test-only wallet, and confirm the mechanism actually works end to end (video-recorded, no mocks).
+Early / pre-alpha, but the core mechanism is proven: launching a real, source-built Leather extension in a Playwright-controlled browser, unlocking it, approving a real dapp connection, and signing a real message all work end to end today (video-recorded, no mocks) — see `examples/spike` and `examples/react-connect` for the real, passing test suites.
 
 ## Prerequisites
 
@@ -100,9 +100,12 @@ playwright-stacks-wallet/
                 # extension's ID, defines the WalletDriver interface every
                 # wallet adapter implements.
   wallets/
-    leather/    # The Leather adapter — the only one implemented today.
+    leather/       # The Leather adapter — the only one implemented today.
   examples/
-    spike/      # The actual Playwright tests.
+    spike/          # Unlock-only tests, driven directly against Leather's own UI.
+    react-connect/  # A minimal real React dapp (Connect + Sign Message) with its own
+                    # passing tests — the target connectToDapp/confirmTransaction prove
+                    # themselves against.
 ```
 
 Adding a new wallet means adding a new package under `wallets/` that implements the same `WalletDriver` interface `packages/core` exports — see [Contributing](#contributing).

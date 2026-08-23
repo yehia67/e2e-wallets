@@ -90,4 +90,19 @@ export interface WalletDriver {
   confirmTransaction(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
 }
 
+/**
+ * Selects a wallet by name in `@stacks/connect`'s own in-page "Connect a wallet" picker modal —
+ * generic dapp-library UI, not any specific wallet's own screens, so it lives here rather than in
+ * a wallet driver. Verified by direct inspection: the picker is plain DOM (no shadow root), each
+ * installed/available wallet is a row containing its name and an exact-text "Connect" button;
+ * uninstalled wallets show an "Install"/"Open" link instead, not a "Connect" button. Scoping the
+ * click to the row matching `walletName` (not just "the first Connect button") keeps this correct
+ * once more than one wallet is installed and listed as available.
+ */
+export async function selectWalletInStacksConnectModal(page: Page, walletName: string): Promise<void> {
+  const row = page.locator('li', { hasText: walletName }).first();
+  await row.waitFor({ state: 'visible', timeout: 10_000 });
+  await row.getByRole('button', { name: /^connect$/i }).click();
+}
+
 export type { BrowserContext, Page };
