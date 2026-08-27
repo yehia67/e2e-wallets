@@ -1,8 +1,8 @@
 {
   "name": "@wallets-e2e/leather",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
-  "description": "External consumer smoke test: installs packed @wallets-e2e/* tarballs (same shape as npm) and drives a standalone React dapp.",
+  "description": "WalletDriver adapter for the real Leather browser extension, built from source (leather-io/extension).",
   "keywords": [
     "playwright",
     "stacks",
@@ -37,14 +37,14 @@
     }
   },
   "files": [
-    "lib"
+    "lib",
+    "src",
+    "fixtures"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build:extension": "bash ./scripts/build-extension.sh",
-    "link:packages": "bash ./scripts/link-packages.sh",
-    "pack:packages": "bash ./scripts/link-packages.sh"
+    "build:extension": "bash ./scripts/build-extension.sh"
   },
   "dependencies": {
     "@wallets-e2e/core": "workspace:*"
@@ -56,8 +56,6 @@
     "@playwright/test": "^1.47.0",
     "typescript": "^5.6.3",
     "@types/node": "^22.7.5",
-    "@types/chrome": "^0.2.7",
-    "@wallets-e2e/core": "file:./.packs/wallets-e2e-core-0.1.2.tgz",
-    "@wallets-e2e/leather": "file:./.packs/wallets-e2e-leather-0.1.2.tgz"
+    "@types/chrome": "^0.2.7"
   }
 }

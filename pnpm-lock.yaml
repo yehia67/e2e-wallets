@@ -26,15 +26,15 @@ importers:
       '@playwright/test':
         specifier: ^1.47.0
         version: 1.62.1
-      '@types/chrome':
-        specifier: ^0.2.7
-        version: 0.2.7
       '@types/node':
         specifier: ^22.7.5
         version: 22.20.1
       '@wallets-e2e/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@wallets-e2e/example-react-connect':
+        specifier: workspace:*
+        version: link:../react-connect
       '@wallets-e2e/leather':
         specifier: workspace:*
         version: link:../../wallets/leather

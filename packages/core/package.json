@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/core",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Shared context-launch and extension-ID-resolution machinery every wallet driver in this monorepo builds on.",
   "keywords": [
@@ -37,7 +37,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
   ],
   "engines": {
     "node": ">=22.18"
