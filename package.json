@@ -14,6 +14,9 @@
   },
   "homepage": "https://github.com/yehia67/e2e-wallets#readme",
   "packageManager": "pnpm@9.11.0",
+  "engines": {
+    "node": ">=22.18"
+  },
   "keywords": [
     "playwright",
     "stacks",

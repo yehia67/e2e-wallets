@@ -37,6 +37,8 @@ test('user connects and signs a message', async () => {
 
 Not hypothetical — this is (lightly trimmed) the actual test in `examples/react-connect/tests/`, running against a real minimal dapp in this repo, against the real Leather extension, today. Both `examples/spike` (unlock only) and `examples/react-connect` (unlock + connect + sign) have real, passing test suites — go read them for the full, current reference rather than trusting this tutorial to stay perfectly in sync.
 
+Prefer Gherkin `.feature` files so product owners can review the scenarios without reading TypeScript? That path is documented separately in [`feature-files.md`](./feature-files.md) — same real Leather extension, same popup rules, different surface.
+
 ## `confirmTransaction` on its own
 
 `confirmTransaction` isn't special-cased to "sign a plain message" — it approves *any* popup that opens for a signature/transaction request, once a wallet is already connected. A dapp that asks for several approvals in one session (e.g. multiple signed actions) calls it once per popup:
@@ -139,7 +141,7 @@ node scripts/deploy-counter-testnet.mjs   # one-time: deploys the example contra
 npm install --save-dev @wallets-e2e/core @wallets-e2e/leather
 ```
 
-[`@wallets-e2e/core`](https://www.npmjs.com/package/@wallets-e2e/core) is published. [`@wallets-e2e/leather`](https://www.npmjs.com/package/@wallets-e2e/leather) is on its way — if it's not live yet, `git clone` this repo and reference `packages/core` / `wallets/leather` via a workspace or `file:` path instead, the way `examples/react-connect` does (`"@wallets-e2e/core": "workspace:*"`).
+[`@wallets-e2e/core`](https://www.npmjs.com/package/@wallets-e2e/core) and [`@wallets-e2e/leather`](https://www.npmjs.com/package/@wallets-e2e/leather) are published. To exercise them the way a real npm consumer would — outside this monorepo — point a sibling project at the built packages with pnpm `link:` (see the monorepo README's install section, or a local `npm-wallet-e2e` smoke folder next to this repo). Inside this repo, examples use `"workspace:*"`.
 
 ## The one thing to get right in your own dapp: picking the Stacks address
 
@@ -175,7 +177,6 @@ Prefer not writing even a throwaway seed into your own source at all? `wallet.ts
 ## What's not here yet
 
 - **Xverse support** — Leather only, for now.
-- **Published npm package** — clone-and-workspace-link only, see Setup above.
 - **Local devnet** — tried and dropped (see [Sending a real transaction](#sending-a-real-transaction) above). Every test that touches chain state here runs against real testnet.
 
 Contributions on any of these are very welcome — see `CONTRIBUTING.md`.
@@ -186,5 +187,6 @@ Everything in this tutorial is trimmed from real code — the full, currently-pa
 
 - **`examples/spike/`** — the minimal proving case: load Leather, unlock it, nothing else. Start here if you just want to confirm the extension loads correctly in your environment.
 - **`examples/react-connect/`** — a real, running React dapp (`pnpm --filter @wallets-e2e/example-react-connect dev`) with Connect Wallet, Sign Message, Send STX, and Call Contract buttons, plus `tests/connect.spec.ts`, `tests/sign.spec.ts`, `tests/transfer.spec.ts`, and `tests/contract-call.spec.ts` — the fullest working reference for wiring `connectToDapp` and `confirmTransaction` into an app of your own.
+- **`examples/bdd/`** — the same react-connect dapp, driven from Gherkin `.feature` files via `@wallets-e2e/core/bdd`. See [`feature-files.md`](./feature-files.md).
 
 Run `pnpm test` from the repo root to execute every example's test suite in one go.

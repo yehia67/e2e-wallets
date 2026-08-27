@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/leather",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "WalletDriver adapter for the real Leather browser extension, built from source (leather-io/extension).",
   "keywords": [
@@ -37,7 +37,9 @@
     }
   },
   "files": [
-    "lib"
+    "lib",
+    "src",
+    "fixtures"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

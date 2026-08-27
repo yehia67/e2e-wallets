@@ -55,9 +55,54 @@ test('connects to my dapp', async () => {
 
 See [`tutorials/quick-start.md`](./tutorials/quick-start.md) for signing, transferring, and calling a contract on top of this — plus every real gotcha this project's own test suite has hit.
 
+Prefer Gherkin so non-TypeScript readers can review scenarios? See [`tutorials/feature-files.md`](./tutorials/feature-files.md).
+
+## Gherkin / `.feature` files
+
+If the people who need to review your wallet tests don't read Playwright TypeScript, write them in Gherkin instead. `@wallets-e2e/core/bdd` ships the **wallet** steps (`I am connected to…`, `I approve the wallet popup`, `the transaction is mined`). Steps about *your* dapp (`I request a transfer…`, `a transaction id is shown`, …) are yours to write — the library only gives you `queueWalletTrigger` / `recordTransactionId` so those clicks stay inside the driver's `trigger()` callback:
+
+```gherkin
+@timeout:1_200_000
+Scenario: A connected visitor sends 1 STX and it lands on chain
+  Given I am connected to Stacks testnet
+  When I request a transfer of 1 STX
+  And I approve the wallet popup
+  Then a transaction id is shown
+  And the transaction is mined
+```
+
+No seed phrase, no network switching, no extension path, no popup mechanics — `Given I am connected to Stacks testnet` does the import, the network switch and the dapp connection as one step, because that is what the sentence means.
+
+```bash
+npm install --save-dev playwright-bdd    # pnpm add -D playwright-bdd in this repo
+```
+
+[`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) is an **optional** peer dependency — importing `@wallets-e2e/core` never requires it, only the `@wallets-e2e/core/bdd` subpath does. Wire it with `defineBddConfig` and run `bddgen && playwright test`: `bddgen` compiles each `.feature` into a real Playwright spec, so it has to run before the suite does. Run with **`workers: 1`** (and `fullyParallel: false`) — Leather's persistent profile cannot be shared across parallel workers.
+
+**Your own dapp steps must queue their click, never perform it.** The driver starts listening for the wallet popup *before* it runs your action; a step that clicks directly opens the popup with nobody listening and dies on a bare 10-second timeout. That is the single most common way to misuse this package:
+
+```ts
+import { queueWalletTrigger, recordTransactionId } from '@wallets-e2e/core/bdd';
+
+When('I request a transfer of 1 STX', async ({ context, page }) => {
+  queueWalletTrigger(context, async () => {
+    await page.getByTestId('send-stx').click(); // runs inside the driver's trigger(), not here
+  });
+});
+
+Then('a transaction id is shown', async ({ context, page }) => {
+  const txid = (await page.getByTestId('transfer-txid').innerText()).replace(/^txid:\s*/, '').trim();
+  recordTransactionId(context, txid); // feeds `Then the transaction is mined`
+});
+```
+
+Two things to know before you run it: the extension has to be built first (`pnpm build:leather` here, or the clone-and-build above in your own project), and **`Then the transaction is mined` spends real testnet STX and waits on real blocks — up to ~10 minutes.** Its default poll allows 15 minutes, far above Playwright's own test timeout, so any scenario using it needs a scenario-level `@timeout:` tag like the one above or Playwright kills the test long before the poll finishes.
+
+[`examples/bdd/`](./examples/bdd/) is a real, passing setup end to end — see its [README](./examples/bdd/README.md). Full walkthrough: [`tutorials/feature-files.md`](./tutorials/feature-files.md).
+
 ## Status
 
-Early / pre-alpha, but the core mechanism is proven: unlocking a real, source-built Leather extension, approving a real dapp connection, signing a real message, sending a real signed STX transfer, and calling a real deployed smart contract all work end to end today (video-recorded, no mocks) — confirmed on real Stacks testnet. See `examples/spike` and `examples/react-connect` for the real, passing test suites.
+Early / pre-alpha, but the core mechanism is proven: unlocking a real, source-built Leather extension, approving a real dapp connection, signing a real message, sending a real signed STX transfer, and calling a real deployed smart contract all work end to end today (video-recorded, no mocks) — confirmed on real Stacks testnet. See `examples/spike`, `examples/react-connect` and `examples/bdd` for the real, passing test suites.
 
 ## Fixture wallet and bringing your own account
 

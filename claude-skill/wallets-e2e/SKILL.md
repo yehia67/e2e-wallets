@@ -1,6 +1,6 @@
 ---
 name: wallets-e2e
-description: Use when writing, running, or debugging a Playwright E2E test that needs a real Stacks wallet browser extension (Leather) -- unlocking it, approving a dapp connection, signing a message, sending a real STX transfer, or calling a smart contract. Covers @wallets-e2e/core and @wallets-e2e/leather.
+description: Use when writing, running, or debugging a Playwright E2E test that needs a real Stacks wallet browser extension (Leather) -- unlocking it, approving a dapp connection, signing a message, sending a real STX transfer, or calling a smart contract. Also covers Gherkin/BDD `.feature` files for those flows via @wallets-e2e/core/bdd and playwright-bdd. Covers @wallets-e2e/core and @wallets-e2e/leather.
 ---
 
 # wallets-e2e
@@ -83,6 +83,74 @@ test('sends a real STX transfer', async () => {
 - **Leather's approval popup button label changes by request type**: "Sign" for a plain message, "Approve" for a real transaction or contract call. Neither has a stable `data-testid`. `confirmTransaction` already handles both; don't hardcode one label if driving the popup directly.
 - **A local Clarinet devnet is not a safe assumption.** Two independent, real Clarinet 3.23.1 bugs (a permanent chain stall a few minutes after every boot; contract deploys that can't land before that stall) make it unusable for this kind of testing today. This package targets real Stacks testnet by default (`TESTNET_RPC_URL`).
 - **`page.waitForFunction(fn, options)` silently drops `options` into the unused `arg` slot** -- the real signature is `(fn, arg, options)`. Always pass `waitForFunction(fn, undefined, options)` if writing this pattern yourself.
+- **Every dapp-side click that opens a wallet popup MUST happen inside the `trigger()` callback.** `connectToDapp` and `confirmTransaction` both register `context.waitForEvent('page')` *before* awaiting `trigger()`. Click the dapp's button before calling the driver -- or in an earlier BDD step -- and the popup opens with nobody listening: you get a bare 10-second timeout, which looks like a broken extension and isn't. This is the single most common way to misuse this package.
+
+## Gherkin / `.feature` files (BDD)
+
+`@wallets-e2e/core/bdd` ships ready-made wallet step definitions so a `.feature` file contains only the dapp's own language -- no seed phrase, no network switching, no extension paths, no popup mechanics.
+
+```bash
+npm install --save-dev playwright-bdd
+```
+
+`playwright-bdd` is an **optional** peer dependency: importing `@wallets-e2e/core` never requires it, only the `@wallets-e2e/core/bdd` subpath does. **Use `playwright-bdd`, never `@cucumber/cucumber`** -- cucumber-js ships its own runner and World and cannot consume Playwright fixtures, so the extension context can't reach the steps.
+
+Steps shipped by the package:
+
+| Step | What it does |
+|---|---|
+| `Given I am connected to {chain} {network}` | Imports the wallet from the seed, switches network, and connects the dapp -- **one coarse step on purpose** |
+| `When I approve the wallet popup` | Runs the queued dapp action inside `confirmTransaction`'s `trigger()` and approves the popup |
+| `Then the transaction is mined` | Polls the Stacks API for the recorded txid; fails on `abort_by_*` or timeout. **Spends real testnet STX and waits on a real block (~10 min).** Its default poll allows 15 minutes -- above any sane Playwright timeout -- so the scenario needs a `@timeout:` tag (e.g. `@timeout:1_200_000`) or Playwright kills the test first |
+
+`Given I am connected to Stacks testnet` resolves the word `testnet` to `testnet4`. Only `mainnet`, `testnet` and `testnet4` are accepted: the `WalletDriver` port offers exactly one network operation (`switchToTestnetNetwork`), so those are the only outcomes a driver can honour. `devnet`/`signet`/`testnet3` are rejected with a distinct "not supported yet" message rather than silently landing on testnet4, and an unknown word throws before anything launches, listing what's valid.
+
+```ts
+// steps/fixtures.ts -- note `test` comes from playwright-bdd, not @playwright/test
+import { test as base } from 'playwright-bdd';
+import { launchContext } from '@wallets-e2e/core';
+import { createWalletSteps } from '@wallets-e2e/core/bdd';
+import { leatherDriver } from '@wallets-e2e/leather';
+
+export const test = base.extend({
+  // The steps read the STOCK `context`/`page` fixtures -- override them, don't add new names.
+  context: async ({}, use) => {
+    const context = await launchContext({ extensionPath, userDataDir, recordVideoDir });
+    await use(context);
+    await context.close();
+  },
+  page: async ({ context }, use) => use(await context.newPage()),
+});
+
+// `test`, `driver`, `seedPhrase` and `walletName` are all required -- omitting `test` would bind
+// the steps to Playwright's stock fixtures, whose context has no extension in it.
+export const { Given, When, Then } = createWalletSteps({
+  test,
+  driver: leatherDriver,
+  seedPhrase: process.env.WALLETS_E2E_SEED_PHRASE!,
+  walletName: 'Leather',        // as @stacks/connect's picker lists it
+  connectTestId: 'connect-wallet', // your dapp's own connect button
+});
+```
+
+**Your own dapp steps must queue their click, never perform it** -- that is how `When I approve the wallet popup` stays safe (see the trigger-callback gotcha above):
+
+```ts
+import { queueWalletTrigger, recordTransactionId } from '@wallets-e2e/core/bdd';
+
+When('I request a transfer of 1 STX', async ({ context, page }) => {
+  queueWalletTrigger(context, async () => {
+    await page.getByTestId('send-stx').click(); // runs INSIDE trigger(), not here
+  });
+});
+
+Then('a transaction id is shown', async ({ context, page }) => {
+  const txid = (await page.getByTestId('transfer-txid').innerText()).replace(/^txid:\s*/, '').trim();
+  recordTransactionId(context, txid); // feeds `Then the transaction is mined`
+});
+```
+
+Wire the runner with `defineBddConfig` and run `bddgen && playwright test`. Include the fixtures file in the `steps` glob -- it exports the `test` the generated specs import. A real, passing setup lives in `examples/bdd/` in this repo.
 
 ## Fixture / test-account wallets
 

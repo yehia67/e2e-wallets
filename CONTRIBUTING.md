@@ -4,14 +4,21 @@ Thanks for considering it — this project is early and could genuinely use help
 
 ## Getting set up
 
+**Node 22.18 or newer is required.** `packages/core`'s unit tests are TypeScript files run straight from source by `node --test`, which relies on Node's unflagged type stripping — on Node 20 those tests fail with a syntax error before they run. Both manifests declare it via `engines`.
+
 ```bash
 git clone https://github.com/yehia67/e2e-wallets.git
 cd e2e-wallets
 pnpm install
-pnpm build:leather   # builds the real Leather extension from source (idempotent)
+pnpm build:leather   # builds the real Leather extension from source (idempotent). REQUIRED --
+                     # nothing in `pnpm build` does it, and without it the browser suites skip
+                     # themselves rather than fail.
 pnpm build
-pnpm test            # launches a real Chromium window and drives it -- expect a browser popup
+pnpm test            # `node --test` unit tests, then real Chromium windows driving the real
+                     # extension -- expect browser popups, and a real testnet transaction
 ```
+
+`pnpm test` spends real testnet STX from the fixture wallet and waits on real blocks, so a full run is minutes, not seconds. To assert that the browser suites actually ran rather than skipped (what you want in CI), set `WALLETS_E2E_REQUIRE_EXTENSION=1` — a missing extension build then fails instead of skipping.
 
 If those don't get you to a passing test suite on a clean checkout, that's a bug in this project (or its docs) — please open an issue.
 
@@ -29,7 +36,7 @@ Every wallet extension this project supports is driven the same way, through one
   }
   ```
   `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural.
-- **`examples/spike`** holds the actual Playwright tests that exercise a driver end to end.
+- **`examples/spike`** holds the actual Playwright tests that exercise a driver end to end. **`examples/react-connect`** is a real dapp with a real `@stacks/connect` integration, and **`examples/bdd`** drives that same dapp from Gherkin `.feature` files through the step library in `packages/core/src/bdd/`.
 
 ## Adding a new wallet adapter
 

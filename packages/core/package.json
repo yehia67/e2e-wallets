@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/core",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Shared context-launch and extension-ID-resolution machinery every wallet driver in this monorepo builds on.",
   "keywords": [
@@ -30,22 +30,39 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./bdd": {
+      "types": "./dist/bdd/index.d.ts",
+      "default": "./dist/bdd/index.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
   ],
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test"
   },
   "peerDependencies": {
-    "@playwright/test": "^1.47.0"
+    "@playwright/test": "^1.47.0",
+    "playwright-bdd": "^9.2.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright-bdd": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@playwright/test": "^1.47.0",
     "@types/node": "^22.7.5",
     "@types/chrome": "^0.2.7",
+    "playwright-bdd": "^9.2.0",
     "typescript": "^5.6.3"
   }
 }
