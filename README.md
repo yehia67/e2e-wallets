@@ -57,7 +57,7 @@ See [`tutorials/quick-start.md`](./tutorials/quick-start.md) for signing, transf
 
 ## Gherkin / `.feature` files
 
-If the people who need to review your wallet tests don't read Playwright TypeScript, write them in Gherkin instead. `@wallets-e2e/core/bdd` ships the wallet step definitions, so your `.feature` file only ever contains your own dapp's language:
+If the people who need to review your wallet tests don't read Playwright TypeScript, write them in Gherkin instead. `@wallets-e2e/core/bdd` ships the **wallet** steps (`I am connected to…`, `I approve the wallet popup`, `the transaction is mined`). Steps about *your* dapp (`I request a transfer…`, `a transaction id is shown`, …) are yours to write — the library only gives you `queueWalletTrigger` / `recordTransactionId` so those clicks stay inside the driver's `trigger()` callback:
 
 ```gherkin
 @timeout:1_200_000
@@ -75,7 +75,7 @@ No seed phrase, no network switching, no extension path, no popup mechanics — 
 npm install --save-dev playwright-bdd    # pnpm add -D playwright-bdd in this repo
 ```
 
-[`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) is an **optional** peer dependency — importing `@wallets-e2e/core` never requires it, only the `@wallets-e2e/core/bdd` subpath does. Wire it with `defineBddConfig` and run `bddgen && playwright test`: `bddgen` compiles each `.feature` into a real Playwright spec, so it has to run before the suite does.
+[`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) is an **optional** peer dependency — importing `@wallets-e2e/core` never requires it, only the `@wallets-e2e/core/bdd` subpath does. Wire it with `defineBddConfig` and run `bddgen && playwright test`: `bddgen` compiles each `.feature` into a real Playwright spec, so it has to run before the suite does. Run with **`workers: 1`** (and `fullyParallel: false`) — Leather's persistent profile cannot be shared across parallel workers.
 
 **Your own dapp steps must queue their click, never perform it.** The driver starts listening for the wallet popup *before* it runs your action; a step that clicks directly opens the popup with nobody listening and dies on a bare 10-second timeout. That is the single most common way to misuse this package:
 

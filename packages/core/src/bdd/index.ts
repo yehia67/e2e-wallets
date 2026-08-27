@@ -126,6 +126,24 @@ export function createWalletSteps(options: CreateWalletStepsOptions) {
   const bdd = createBdd(requireTest(test));
   const { Given, When, Then } = bdd;
 
+  // `walletName` is required on the type, but an empty string still type-checks and would leave
+  // `@stacks/connect`'s picker with nothing useful to click.
+  if (!walletName?.trim()) {
+    throw new Error(
+      `[@wallets-e2e/core/bdd] createWalletSteps({ walletName }) needs the wallet's name as ` +
+        `@stacks/connect lists it (e.g. 'Leather'). An empty walletName cannot select a picker entry.`,
+    );
+  }
+
+  // Zero/negative would make `waitForTransactionMined` give up immediately (or misbehave) while
+  // the scenario still looks like a real on-chain wait.
+  if (!(minedTimeoutMs > 0)) {
+    throw new Error(
+      `[@wallets-e2e/core/bdd] createWalletSteps({ minedTimeoutMs }) must be a positive number of ` +
+        `milliseconds (got ${String(minedTimeoutMs)}).`,
+    );
+  }
+
   const runConnectTrigger =
     connect ??
     (async (page: Page) => {
@@ -188,7 +206,16 @@ export function createWalletSteps(options: CreateWalletStepsOptions) {
   // "The popup closed" is never proof a transaction landed — this polls the chain for real.
   Then('the transaction is mined', async ({ context }: WalletStepFixtures) => {
     const txid = requireTransactionId(context);
-    const resolvedRpcUrl = rpcUrl ?? STACKS_NETWORK_RPC_URLS[walletNetwork(context) ?? 'testnet4'];
+    const network = walletNetwork(context);
+    // Without an explicit `rpcUrl`, the connect step must have run so we know which chain to poll.
+    // Falling back to testnet4 would happily wait on the wrong network for a tx that never appears.
+    const resolvedRpcUrl = rpcUrl ?? (network && STACKS_NETWORK_RPC_URLS[network]);
+    if (!resolvedRpcUrl) {
+      throw new Error(
+        `[@wallets-e2e/core/bdd] "the transaction is mined" ran with no network recorded and no ` +
+          `rpcUrl override. Run "I am connected to ..." first, or pass rpcUrl to createWalletSteps.`,
+      );
+    }
 
     const status = await waitForTransactionMined(txid, {
       rpcUrl: resolvedRpcUrl,

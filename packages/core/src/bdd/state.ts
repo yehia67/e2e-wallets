@@ -127,7 +127,17 @@ export function recordTransactionId(context: BrowserContext, txid: string): void
         `label or an empty locator match is the usual cause.`,
     );
   }
-  stateFor(context).txid = trimmed;
+  const state = stateFor(context);
+  // A second record without a mine (or a reset) would silently drop the first id and poll the
+  // wrong transaction — the same one-shot rule as queueWalletTrigger.
+  if (state.txid) {
+    throw new Error(
+      `[@wallets-e2e/core/bdd] A transaction id is already recorded for this scenario ` +
+        `("${state.txid}"). Call recordTransactionId once per scenario — overwriting would make ` +
+        `"the transaction is mined" poll the later id and drop the earlier one.`,
+    );
+  }
+  state.txid = trimmed;
 }
 
 /** The recorded txid, or a named error explaining which step should have recorded one. */

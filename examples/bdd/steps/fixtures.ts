@@ -43,16 +43,23 @@ export const test = base.extend({
     // A browser extension only loads via a persistent context, and `packages/core` owns the one
     // call that creates it (AD-1) — never `chromium.launch` here.
     const userDataDir = mkdtempSync(join(tmpdir(), `wallets-e2e-bdd-${testInfo.testId}-`));
-    const context = await launchContext({
-      extensionPath: EXTENSION_PATH,
-      userDataDir,
-      recordVideoDir: join(import.meta.dirname, '../test-results/videos'),
-    });
-    await use(context);
-    await context.close();
-    // Chromium profiles are tens of megabytes each and one is created per scenario; without this
-    // a long run quietly fills the temp dir. Best-effort — a failed cleanup must not fail the test.
-    rmSync(userDataDir, { recursive: true, force: true });
+    // Cleanup must run even when `launchContext` throws after `mkdtempSync` — otherwise failed
+    // runs leak Chromium profiles (tens of MB each) into the temp dir.
+    try {
+      const context = await launchContext({
+        extensionPath: EXTENSION_PATH,
+        userDataDir,
+        recordVideoDir: join(import.meta.dirname, '../test-results/videos'),
+      });
+      try {
+        await use(context);
+      } finally {
+        await context.close();
+      }
+    } finally {
+      // Best-effort — a failed cleanup must not fail the test.
+      rmSync(userDataDir, { recursive: true, force: true });
+    }
   },
 
   page: async ({ context }: { context: BrowserContext }, use: (page: Page) => Promise<void>) => {

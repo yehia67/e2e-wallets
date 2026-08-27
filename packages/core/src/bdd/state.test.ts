@@ -115,6 +115,14 @@ describe('recordTransactionId / requireTransactionId', () => {
     // Nothing may be stored by a rejected call.
     assert.throws(() => requireTransactionId(context), /no transaction id recorded/);
   });
+
+  it('refuses a second record rather than silently dropping the first txid', () => {
+    const context = fakeContext();
+    recordTransactionId(context, TXID);
+    const other = 'b'.repeat(64);
+    assert.throws(() => recordTransactionId(context, other), /already recorded/);
+    assert.equal(requireTransactionId(context), TXID);
+  });
 });
 
 describe('resetWalletState', () => {

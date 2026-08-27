@@ -53,14 +53,17 @@ export function requireDriver(driver: WalletDriver | undefined): WalletDriver {
  * quickest fix for this error is to paste a phrase inline, which is exactly the wrong one.
  */
 export function requireSeedPhrase(seedPhrase: string | undefined): string {
-  if (!seedPhrase) {
+  // Whitespace-only is as empty as `''` — both would reach `importWallet` and fail opaquely inside
+  // the extension rather than as a named wiring mistake here.
+  const trimmed = seedPhrase?.trim();
+  if (!trimmed) {
     throw new Error(
       `[@wallets-e2e/core/bdd] No seed phrase was supplied, so the wallet cannot be imported. ` +
         `Pass one to createWalletSteps({ seedPhrase }) — read it from an environment variable, ` +
         `never a real-value key committed to source.`,
     );
   }
-  return seedPhrase;
+  return trimmed;
 }
 
 /**

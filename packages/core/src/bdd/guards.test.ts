@@ -41,6 +41,10 @@ describe('requireSeedPhrase', () => {
     assert.throws(() => requireSeedPhrase(''));
   });
 
+  it('throws on a whitespace-only phrase rather than handing blanks to importWallet', () => {
+    assert.throws(() => requireSeedPhrase('   \t  '));
+  });
+
   it('points at an environment variable, never an inline key (AD-5)', () => {
     assert.throws(
       () => requireSeedPhrase(undefined),
@@ -53,8 +57,9 @@ describe('requireSeedPhrase', () => {
     );
   });
 
-  it('returns the phrase untouched when one is supplied', () => {
-    assert.equal(requireSeedPhrase('word '.repeat(24).trim()), 'word '.repeat(24).trim());
+  it('returns the trimmed phrase when one is supplied', () => {
+    const phrase = 'word '.repeat(24).trim();
+    assert.equal(requireSeedPhrase(`  ${phrase}  `), phrase);
   });
 });
 
