@@ -207,6 +207,116 @@ That `@timeout:` tag is playwright-bdd syntax, not product language. Keep it; wi
 
 Do **not** split connect into granular `Given I click connect` / `When I approve` pairs that put the click outside `trigger()` — that reopens the timeout trap the coarse step exists to hide.
 
+## Using this on a large production project
+
+Everything above gets one `.feature` file working. What follows is what changes when there are forty of them and several teams writing them.
+
+### Three step layers, three owners
+
+The single most useful discipline is knowing which layer a step belongs to before writing it.
+
+| Layer | Lives in | Owned by | Changes when |
+|---|---|---|---|
+| **Wallet steps** | `@wallets-e2e/core/bdd` | this package | The wallet protocol changes. You never write these. |
+| **Shared dapp steps** | your own `steps/shared/` | QA / platform team | Your app's cross-cutting vocabulary changes (auth, navigation, common assertions) |
+| **Feature-local steps** | `steps/<area>/` | the team owning that area | Only that area changes |
+
+A step that two features need belongs in shared. A step one feature needs stays local. Promoting local → shared is a deliberate review decision, never automatic — that promotion is what keeps the shared vocabulary small enough to hold in your head.
+
+### Guard against step explosion
+
+The failure mode of BDD at scale is not too few steps, it's too many near-identical ones: `I click send`, `I press the send button`, `I hit send`. Three steps, one behaviour, and now nobody can find the one that exists.
+
+Two rules that prevent it:
+
+1. **A new step must be justified by a second caller.** If only one scenario will ever say it, ask whether the scenario is written at the wrong altitude.
+2. **Grep before you write.** `grep -rh "^\s*\(Given\|When\|Then\)(" steps/ | sort -u` prints your entire vocabulary. If it doesn't fit on a screen or two, you have a curation problem, not a coverage problem.
+
+Run that grep in code review, not just when writing.
+
+### Write declaratively — that's the entire point
+
+The coarse wallet steps this package ships are coarse on purpose. Your steps should match that altitude, or the feature file stops being reviewable and the whole exercise is wasted effort:
+
+```gherkin
+# Imperative — a script in Gherkin costume. A product owner learns nothing from this.
+When I click the "Send" button
+And I type "1" into the amount field
+And I click "Confirm"
+And I wait for the popup
+And I click "Approve"
+
+# Declarative — states intent. This is what a PO can actually review and correct.
+When I request a transfer of 1 STX
+And I approve the wallet popup
+```
+
+The imperative version also breaks every time the UI moves. The declarative one only breaks when the *behaviour* changes — which is exactly when a test should break.
+
+### Make product-owner review a real step, not a hope
+
+The readable file is worthless if nobody reads it. What makes it stick:
+
+- **Put `*.feature` under CODEOWNERS** with the product owner as a required reviewer. A PR touching behaviour then cannot merge without them seeing the sentences.
+- **Review the `.feature` diff alone.** `git diff --stat -- '**/*.feature'` in the PR template gives them a two-line summary instead of a 600-line TypeScript diff.
+- **Write the feature file first, get it approved, then implement.** A `.feature` reviewed after the code is a transcript. Reviewed before, it's a specification — and disagreements surface while they're still cheap.
+- **Treat a PO's wording correction as a code change.** If they say "we don't call it a transfer, we call it a payout", rename the step. The vocabulary is theirs.
+
+### Split fast scenarios from slow ones
+
+`Then the transaction is mined` waits on real testnet blocks. At ~10 minutes each, a suite of thirty such scenarios cannot run on every pull request — and Hiro's public API is rate-limited, so hammering it in parallel makes things worse, not faster.
+
+Tag by cost and run the tiers separately. playwright-bdd puts tags into the generated test title, so Playwright's own `--grep` filters them:
+
+```gherkin
+@chain @timeout:1_200_000
+Scenario: A connected visitor sends 1 STX and it lands on chain
+```
+
+```bash
+# Every PR: connect, UI assertions, popup approvals — no chain waits.
+playwright test --grep-invert @chain
+
+# Nightly / pre-release only.
+playwright test --grep @chain
+```
+
+Keep `@chain` scenarios few and high-value. Most regressions live in connect and approval flows, which cost seconds; the on-chain confirmation is proving the pipe works, and it doesn't need re-proving thirty times a night.
+
+### Parallelism is capped by the wallet, not by Playwright
+
+`workers: 1` in the example config is a real constraint, not caution. Each worker needs its own persistent Chromium profile with the extension loaded, and a funded fixture wallet — and two workers sharing one wallet will race on nonces and produce failures that look random.
+
+To scale past one worker you need **one funded wallet per worker**, keyed off `testInfo.parallelIndex`, with the profile directory already unique per test (as the fixture does). Budget for the faucet being rate-limited: fund the pool ahead of time out-of-band, never inside the test run.
+
+Until you've done that, leave `workers: 1` and get your speed from the tier split above instead.
+
+### CI
+
+```bash
+WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm test
+```
+
+Always set it. Without it, a CI job with no extension build reports green while skipping every scenario — a passing pipeline that tested nothing.
+
+The rest of the CI shape:
+
+- **Cache the built extension** keyed on the pinned `leather-io/extension` commit. Building from source on every run dominates the job time.
+- **Pin that commit.** A moving `main` makes wallet UI changes arrive as mystery failures in unrelated PRs.
+- **Keep the seed in a secret**, injected as `WALLETS_E2E_SEED_PHRASE` — never a checked-in default in a real project. Video recording is on by default, so treat artifacts as sensitive if the wallet ever holds anything.
+- **Publish `.features-gen/` and videos as artifacts** on failure. A recording of the real popup is usually faster to diagnose from than a stack trace.
+
+### Anti-patterns, all of them real
+
+| Don't | Why |
+|---|---|
+| Split connect into `Given I click connect` / `When I approve` | Puts the click outside `trigger()` and reopens the 10-second-timeout trap |
+| Re-implement popup catching in your own step | That logic belongs to the driver; yours will drift from it |
+| Put seed phrases, network names, or extension paths in a `.feature` | Breaks the one property that justifies the file existing |
+| Use `Scenario Outline` across networks | Only `mainnet` and `testnet4` are honoured; the rest throw |
+| Assert on wallet internals from a dapp step | The driver already verifies the popup's origin and clean close |
+| Let a step name outlive the product's language | A stale vocabulary is how PO review quietly stops happening |
+
 ## The `examples/bdd/` folder
 
 Full, currently-passing reference:
