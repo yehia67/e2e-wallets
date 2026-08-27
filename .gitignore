@@ -23,6 +23,9 @@ test-results/
 playwright-report/
 blob-report/
 
+# playwright-bdd's generated specs — compiled from features/**/*.feature by `bddgen` on every run
+.features-gen/
+
 # TypeScript build info
 *.tsbuildinfo
 

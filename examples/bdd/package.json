@@ -1,0 +1,20 @@
+{
+  "name": "@wallets-e2e/example-bdd",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gherkin/.feature specs driving the real Leather extension through @wallets-e2e/core/bdd's coarse wallet steps, against examples/react-connect's dapp.",
+  "scripts": {
+    "test": "bddgen && playwright test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^22.7.5",
+    "@wallets-e2e/core": "workspace:*",
+    "@wallets-e2e/example-react-connect": "workspace:*",
+    "@wallets-e2e/leather": "workspace:*",
+    "playwright-bdd": "^9.2.0",
+    "typescript": "^5.6.3"
+  }
+}

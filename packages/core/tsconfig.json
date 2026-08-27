@@ -1,7 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src"
+    "rootDir": "src",
+    // `src/bdd/networks.test.ts` is run straight from source by `node --test` (Node's built-in
+    // type stripping), which requires the real `.ts` specifier — Node will not remap `.js` onto a
+    // `.ts` file. Safe here because this config is `noEmit`; `tsconfig.build.json` turns it back
+    // off and excludes the tests, so no `.ts` specifier can ever land in `dist/`.
+    "allowImportingTsExtensions": true
   },
   "include": ["src"]
 }
