@@ -55,6 +55,8 @@ test('connects to my dapp', async () => {
 
 See [`tutorials/quick-start.md`](./tutorials/quick-start.md) for signing, transferring, and calling a contract on top of this — plus every real gotcha this project's own test suite has hit.
 
+Prefer Gherkin so non-TypeScript readers can review scenarios? See [`tutorials/feature-files.md`](./tutorials/feature-files.md).
+
 ## Gherkin / `.feature` files
 
 If the people who need to review your wallet tests don't read Playwright TypeScript, write them in Gherkin instead. `@wallets-e2e/core/bdd` ships the **wallet** steps (`I am connected to…`, `I approve the wallet popup`, `the transaction is mined`). Steps about *your* dapp (`I request a transfer…`, `a transaction id is shown`, …) are yours to write — the library only gives you `queueWalletTrigger` / `recordTransactionId` so those clicks stay inside the driver's `trigger()` callback:
@@ -96,7 +98,7 @@ Then('a transaction id is shown', async ({ context, page }) => {
 
 Two things to know before you run it: the extension has to be built first (`pnpm build:leather` here, or the clone-and-build above in your own project), and **`Then the transaction is mined` spends real testnet STX and waits on real blocks — up to ~10 minutes.** Its default poll allows 15 minutes, far above Playwright's own test timeout, so any scenario using it needs a scenario-level `@timeout:` tag like the one above or Playwright kills the test long before the poll finishes.
 
-[`examples/bdd/`](./examples/bdd/) is a real, passing setup end to end — see its [README](./examples/bdd/README.md).
+[`examples/bdd/`](./examples/bdd/) is a real, passing setup end to end — see its [README](./examples/bdd/README.md). Full walkthrough: [`tutorials/feature-files.md`](./tutorials/feature-files.md).
 
 ## Status
 

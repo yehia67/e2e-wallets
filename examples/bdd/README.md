@@ -2,6 +2,8 @@
 
 Gherkin `.feature` files driving the **real** Leather extension, through the wallet steps shipped by [`@wallets-e2e/core/bdd`](../../packages/core/src/bdd/). The dapp under test is [`examples/react-connect`](../react-connect/) — there is no second demo app; this workspace starts that one's Vite dev server and points a browser at it.
 
+**Tutorial:** [`tutorials/feature-files.md`](../../tutorials/feature-files.md) — setup, `createWalletSteps`, queue-vs-click rule, timeouts.
+
 ## Running it
 
 ```bash
