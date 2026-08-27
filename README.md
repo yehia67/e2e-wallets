@@ -13,20 +13,13 @@ Playwright fixtures for driving **real** Stacks wallet browser extensions in end
 ## Install
 
 ```bash
-npm install --save-dev @wallets-e2e/core @wallets-e2e/leather @playwright/test
+pnpm add -D @wallets-e2e/core @wallets-e2e/leather @playwright/test
 ```
 
-Then build the real extension from source once (idempotent — skips if already built):
-
-```bash
-git clone --depth 1 https://github.com/leather-io/extension.git /tmp/leather-source
-cd /tmp/leather-source && pnpm install && pnpm prepare && pnpm build
-cp -R dist /path/to/your/project/wallets/leather/dist
-```
-
-## Quick start
+## Use it
 
 ```ts
+// tests/connect.spec.ts
 import { test, expect } from '@playwright/test';
 import { launchContext, selectWalletInStacksConnectModal } from '@wallets-e2e/core';
 import { leatherDriver } from '@wallets-e2e/leather';
@@ -36,15 +29,14 @@ test('connects to my dapp', async () => {
   const context = await launchContext({
     extensionPath: 'wallets/leather/dist',
     userDataDir: '.tmp/my-test-profile',
-    recordVideoDir: 'test-results/videos',
   });
   const page = await context.newPage();
-  await page.goto('http://localhost:3000'); // your dapp, running locally
+  await page.goto('http://localhost:3000'); // your dapp
 
   await leatherDriver.importWallet(context, wallet.seedPhrase);
 
   await leatherDriver.connectToDapp(context, async () => {
-    await page.getByRole('button', { name: 'Connect Wallet' }).click(); // your dapp's own button
+    await page.getByRole('button', { name: 'Connect Wallet' }).click(); // your button
     await selectWalletInStacksConnectModal(page, 'Leather');
   });
 
@@ -53,9 +45,28 @@ test('connects to my dapp', async () => {
 });
 ```
 
-See [`tutorials/quick-start.md`](./tutorials/quick-start.md) for signing, transferring, and calling a contract on top of this — plus every real gotcha this project's own test suite has hit.
+```ts
+// playwright.config.ts — workers: 1 is required, Leather's profile can't be shared
+import { defineConfig } from '@playwright/test';
 
-Prefer Gherkin so non-TypeScript readers can review scenarios? See [`tutorials/feature-files.md`](./tutorials/feature-files.md).
+export default defineConfig({ workers: 1, fullyParallel: false });
+```
+
+```bash
+npx playwright test
+```
+
+Signing, transfers, contract calls: [`tutorials/quick-start.md`](./tutorials/quick-start.md). Gherkin `.feature` files: [`tutorials/feature-files.md`](./tutorials/feature-files.md).
+
+### `extensionPath`
+
+Leather ships no build to npm, so build it once:
+
+```bash
+git clone --depth 1 https://github.com/leather-io/extension.git /tmp/leather-source
+cd /tmp/leather-source && pnpm install && pnpm prepare && pnpm build
+cp -R /tmp/leather-source/dist ~/your-project/wallets/leather/dist
+```
 
 ## Gherkin / `.feature` files
 
@@ -96,7 +107,7 @@ Then('a transaction id is shown', async ({ context, page }) => {
 });
 ```
 
-Two things to know before you run it: the extension has to be built first (`pnpm build:leather` here, or the clone-and-build above in your own project), and **`Then the transaction is mined` spends real testnet STX and waits on real blocks — up to ~10 minutes.** Its default poll allows 15 minutes, far above Playwright's own test timeout, so any scenario using it needs a scenario-level `@timeout:` tag like the one above or Playwright kills the test long before the poll finishes.
+Two things to know before you run it: the extension has to be built first (see [Build the extension](#build-the-extension)), and **`Then the transaction is mined` spends real testnet STX and waits on real blocks — up to ~10 minutes.** Its default poll allows 15 minutes, far above Playwright's own test timeout, so any scenario using it needs a scenario-level `@timeout:` tag like the one above or Playwright kills the test long before the poll finishes.
 
 [`examples/bdd/`](./examples/bdd/) is a real, passing setup end to end — see its [README](./examples/bdd/README.md). Full walkthrough: [`tutorials/feature-files.md`](./tutorials/feature-files.md).
 
