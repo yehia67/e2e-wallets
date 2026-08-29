@@ -25,4 +25,9 @@ test('switches MetaMask home network to Sepolia', async ({ extensionContext }) =
 
   const networkLabel = home.locator('[data-testid="sort-by-networks"]');
   await expect(networkLabel).toContainText(/sepolia/i, { timeout: 30_000 });
+
+  const homeText = (await home.locator('body').innerText()).toLowerCase();
+  expect(homeText, 'MetaMask must reach Sepolia via HTTPS RPC, not Infura').not.toMatch(
+    /unable to connect|infura eth_|unauthorized/i,
+  );
 });

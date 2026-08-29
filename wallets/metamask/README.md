@@ -77,7 +77,7 @@ test('connects on Sepolia', async () => {
 });
 ```
 
-Sepolia RPC (no API key / no login): MetaMask's test build ships a broken Infura key, so the driver points Sepolia at a local `127.0.0.1` proxy that forwards to a public endpoint (default `https://ethereum-sepolia-rpc.publicnode.com`, with failover).
+Sepolia RPC (no API key / no login): MetaMask's test build ships a broken Infura key, so `switchToTestnetNetwork` edits the **built-in** Sepolia network and sets a public HTTPS RPC (default `https://0xrpc.io/sep`, probe-verified before use). It never adds a custom network with chain id `11155111` (already exists). Override with `WALLETS_E2E_SEPOLIA_RPC_URL`.
 
 ## What's exported
 

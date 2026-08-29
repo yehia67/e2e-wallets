@@ -1,7 +1,10 @@
 import type { BrowserContext, Page, WalletAccount, WalletDriver } from '@wallets-e2e/core';
-import { resolveExtensionId } from '@wallets-e2e/core';
+import {
+  resolveExtensionId,
+  resolveWorkingSepoliaRpc,
+  sepoliaRpcCandidates,
+} from '@wallets-e2e/core';
 import { wallet } from '../fixtures/wallet.js';
-import { getMetaMaskSepoliaRpcUrl } from './sepolia-rpc-proxy.js';
 
 async function openOnboardingPage(context: BrowserContext): Promise<{ page: Page; extensionId: string }> {
   const extensionId = await resolveExtensionId(context);
@@ -218,40 +221,31 @@ async function resolveSignatureApprovalPage(
   );
 }
 
-/** Sepolia chain ids MetaMask uses in different screens. */
+/**
+ * Sepolia is a MetaMask built-in (chain 11155111). Never Add custom network —
+ * that always hits "Chain ID already exists" and loops forever.
+ * Path: Show test networks → edit Sepolia RPC (replace dead Infura) → select Sepolia.
+ */
 const SEPOLIA_HEX = '0xaa36a7';
 const SEPOLIA_CAIP = 'eip155:11155111';
-/** Home select-modal list items use HEX (MetaMask converts CAIP → hex). */
-const SEPOLIA_MODAL_LIST_ITEM = `[data-testid="network-list-item-${SEPOLIA_HEX}"]`;
-/** Networks management page keys options by CAIP. */
-const SEPOLIA_OPTIONS_BUTTON = `[data-testid="network-list-item-options-button-${SEPOLIA_CAIP}"], [data-testid="network-list-item-options-button-${SEPOLIA_HEX}"]`;
-const SEPOLIA_NETWORKS_LIST_ITEM = `[data-testid="network-list-item-${SEPOLIA_CAIP}"], [data-testid="network-list-item-${SEPOLIA_HEX}"]`;
-const SEPOLIA_NETWORK_NAME = 'Sepolia';
-const SEPOLIA_POPULAR_ADD = `[data-testid="popular-network-${SEPOLIA_CAIP}"] [data-testid="test-add-button"], [data-testid="popular-network-${SEPOLIA_HEX}"] [data-testid="test-add-button"]`;
+const SEPOLIA_MODAL_ITEM = `[data-testid="network-list-item-${SEPOLIA_HEX}"]`;
+const SEPOLIA_OPTIONS =
+  `[data-testid="network-list-item-options-button-${SEPOLIA_CAIP}"], [data-testid="network-list-item-options-button-${SEPOLIA_HEX}"]`;
+const SEPOLIA_LIST_ITEM =
+  `[data-testid="network-list-item-${SEPOLIA_CAIP}"], [data-testid="network-list-item-${SEPOLIA_HEX}"]`;
 const SHOW_TEST_NETWORKS_TOGGLE =
   'label.toggle-button:has([data-testid="networks-page-show-test-networks"])';
 
-/** Short label for MetaMask's RPC dropdown — never Infura. */
-function sepoliaRpcLabel(rpcUrl: string): string {
-  if (rpcUrl.includes('127.0.0.1') || rpcUrl.includes('localhost')) return 'LocalSepoliaProxy';
-  if (rpcUrl.includes('1rpc.io')) return '1RPC';
-  if (rpcUrl.includes('0xrpc.io')) return '0xRPC';
-  if (rpcUrl.includes('sentio')) return 'Sentio';
-  if (rpcUrl.includes('nodies')) return 'Nodies';
-  if (rpcUrl.includes('tenderly')) return 'Tenderly';
-  if (rpcUrl.includes('publicnode')) return 'PublicNode';
-  return 'PublicSepolia';
+function rpcNickname(rpcUrl: string): string {
+  try {
+    return new URL(rpcUrl).hostname.replace(/^www\./, '').slice(0, 28);
+  } catch {
+    return 'PublicSepolia';
+  }
 }
 
-async function waitForFooterNextEnabled(page: Page, label: string, timeoutMs = 30_000): Promise<void> {
-  const save = page.locator('[data-testid="page-container-footer-next"]');
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline && !(await save.isEnabled().catch(() => false))) {
-    await page.waitForTimeout(300);
-  }
-  if (!(await save.isEnabled().catch(() => false))) {
-    throw new Error(`[wallets/metamask] ${label} — save stayed disabled after ${timeoutMs}ms.`);
-  }
+async function bodySnippet(page: Page, n = 500): Promise<string> {
+  return (await page.locator('body').innerText().catch(() => '')).slice(0, n);
 }
 
 async function openManageNetworks(page: Page): Promise<void> {
@@ -267,212 +261,152 @@ async function openManageNetworks(page: Page): Promise<void> {
   });
 }
 
-async function closeManageNetworks(page: Page, extensionId?: string): Promise<void> {
-  for (let i = 0; i < 6; i++) {
-    if (await page.locator('[data-testid="parent-selector-home"]').isVisible({ timeout: 500 }).catch(() => false)) {
-      return;
-    }
-    const back = page
-      .locator(
-        '[data-testid="networks-page-form-back-button"], [data-testid="page-header-back-button"], header button[aria-label="Back"], header button[aria-label="Close"]',
-      )
-      .first();
-    if (await back.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await back.click({ timeout: 5_000 }).catch(() => {});
-      await page.waitForTimeout(400);
-      continue;
-    }
-    break;
-  }
-
-  if (await page.locator('[data-testid="parent-selector-home"]').isVisible({ timeout: 2_000 }).catch(() => false)) {
+async function goHome(page: Page, extensionId: string): Promise<void> {
+  if (await page.locator('[data-testid="parent-selector-home"]').isVisible({ timeout: 1_000 }).catch(() => false)) {
     return;
   }
-
-  // Hard fallback — RPC edit screens can leave nested history that one Back can't clear.
-  const id = extensionId ?? (await resolveExtensionId(page.context()));
-  await page.goto(`chrome-extension://${id}/home.html`);
+  await page.goto(`chrome-extension://${extensionId}/home.html`);
   await page.locator('[data-testid="parent-selector-home"]').waitFor({ state: 'visible', timeout: 45_000 });
 }
 
-async function isOnSepoliaNetwork(page: Page): Promise<boolean> {
-  const label = (
-    await page.locator('[data-testid="sort-by-networks"]').innerText({ timeout: 5_000 }).catch(() => '')
-  ).toLowerCase();
-  return label.includes('sepolia');
-}
-
-async function isShowTestNetworksEnabled(page: Page): Promise<boolean> {
-  const input = page.locator('[data-testid="networks-page-show-test-networks"]');
-  if (!(await input.isVisible({ timeout: 2_000 }).catch(() => false))) return false;
-  const dataChecked = await input.getAttribute('data-checked');
-  if (dataChecked === 'true') return true;
-  if (dataChecked === 'false') return false;
-  return await input.isChecked().catch(() => false);
-}
-
-/** Only turns the toggle on — never off (Sepolia hides when test networks are disabled). */
 async function ensureShowTestNetworksEnabled(page: Page): Promise<void> {
   const input = page.locator('[data-testid="networks-page-show-test-networks"]');
   if (!(await input.isVisible({ timeout: 5_000 }).catch(() => false))) {
-    throw new Error('[wallets/metamask] Show test networks toggle not found on Manage networks page.');
+    throw new Error('[wallets/metamask] Show test networks toggle not found.');
   }
-  if (await isShowTestNetworksEnabled(page)) return;
+  const on =
+    (await input.getAttribute('data-checked')) === 'true' || (await input.isChecked().catch(() => false));
+  if (on) return;
   await page.locator(SHOW_TEST_NETWORKS_TOGGLE).click();
-  await page.waitForTimeout(1_000);
-  if (!(await isShowTestNetworksEnabled(page))) {
-    throw new Error('[wallets/metamask] Failed to enable Show test networks.');
-  }
+  await page.waitForTimeout(800);
 }
 
-async function isSepoliaListedOnNetworksPage(page: Page): Promise<boolean> {
-  if (await page.locator(SEPOLIA_NETWORKS_LIST_ITEM).first().isVisible({ timeout: 500 }).catch(() => false)) {
-    return true;
-  }
-  if (await page.locator(`[data-testid="${SEPOLIA_NETWORK_NAME}"]`).first().isVisible({ timeout: 500 }).catch(() => false)) {
-    return true;
-  }
-  return page.getByText(/^Sepolia$/i).first().isVisible({ timeout: 500 }).catch(() => false);
-}
-
-async function waitForSepoliaListedOnNetworksPage(page: Page, timeoutMs = 10_000): Promise<boolean> {
+async function waitForSepoliaListed(page: Page, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await isSepoliaListedOnNetworksPage(page)) return true;
+    if (
+      (await page.locator(SEPOLIA_LIST_ITEM).first().isVisible({ timeout: 400 }).catch(() => false)) ||
+      (await page.getByText(/^Sepolia$/i).first().isVisible({ timeout: 400 }).catch(() => false))
+    ) {
+      return;
+    }
     await page.waitForTimeout(250);
   }
-  return false;
+  throw new Error(
+    `[wallets/metamask] Built-in Sepolia not listed after enabling Show test networks. UI:\n${await bodySnippet(page)}`,
+  );
 }
 
-async function addPopularSepoliaIfOffered(page: Page): Promise<boolean> {
-  const addSepolia = page.locator(SEPOLIA_POPULAR_ADD).first();
-  if (!(await addSepolia.isVisible({ timeout: 5_000 }).catch(() => false))) return false;
-  await addSepolia.click();
-  await page.waitForTimeout(1_500);
-  return waitForSepoliaListedOnNetworksPage(page, 10_000);
-}
-
-async function addCustomSepoliaNetwork(page: Page, rpcUrl: string): Promise<void> {
-  const rpcLabel = sepoliaRpcLabel(rpcUrl);
-
-  await page.locator('[data-testid="networks-page-add-custom-network-button"]').click({ timeout: 10_000 });
-  await page.locator('[data-testid="network-form-network-name"]').waitFor({ state: 'visible', timeout: 10_000 });
-  await page.locator('[data-testid="network-form-network-name"]').fill(SEPOLIA_NETWORK_NAME);
-
-  await page.locator('[data-testid="test-add-rpc-drop-down"]').click({ timeout: 10_000 });
-  await page.getByRole('button', { name: /add rpc url/i }).click({ timeout: 10_000 });
+/** MetaMask rejects the RPC → false so caller can try the next HTTPS URL. */
+async function submitRpcUrlForm(page: Page, rpcUrl: string): Promise<boolean> {
+  const nick = rpcNickname(rpcUrl);
   const rpcInput = page.locator('[data-testid="rpc-url-input-test"]');
+  const nameInput = page.locator('[data-testid="rpc-name-input-test"]');
+  await rpcInput.waitFor({ state: 'visible', timeout: 10_000 });
+  await rpcInput.fill('');
   await rpcInput.fill(rpcUrl);
-  await page.locator('[data-testid="rpc-name-input-test"]').fill(rpcLabel);
-  await waitForFooterNextEnabled(page, `Sepolia RPC "${rpcUrl}" was rejected`);
-  await page.locator('[data-testid="page-container-footer-next"]').click({ timeout: 10_000 });
+  await nameInput.fill(nick);
 
-  const chainIdInput = page.locator('[data-testid="network-form-chain-id"]');
-  const chainIdValue = await chainIdInput.inputValue().catch(() => '');
-  if (!chainIdValue || chainIdValue === '0') {
-    await chainIdInput.fill('11155111');
+  const addBtn = page
+    .getByRole('button', { name: /^add url$/i })
+    .or(page.locator('[data-testid="page-container-footer-next"]'));
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const text = (await page.locator('body').innerText().catch(() => '')).toLowerCase();
+    if (text.includes('could not fetch chain id') || text.includes('invalid rpc url')) {
+      return false;
+    }
+    if (await addBtn.first().isEnabled().catch(() => false)) break;
+    await page.waitForTimeout(250);
   }
-
-  const currencyInput = page.locator('#nativeCurrency, [data-testid="network-form-ticker-input"]').first();
-  await currencyInput.fill('ETH');
-
-  await waitForFooterNextEnabled(page, 'Could not save custom Sepolia network');
-  await page.locator('[data-testid="page-container-footer-next"]').click({ timeout: 10_000 });
-  await page.waitForTimeout(1_000);
+  if (!(await addBtn.first().isEnabled().catch(() => false))) return false;
+  await addBtn.first().click({ timeout: 10_000 });
+  const closed = await rpcInput
+    .waitFor({ state: 'hidden', timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (closed) return true;
+  const text = (await page.locator('body').innerText().catch(() => '')).toLowerCase();
+  return !(text.includes('could not fetch chain id') || text.includes('invalid rpc'));
 }
 
 /**
- * Point Sepolia at a public no-auth RPC and make it the *active* endpoint.
- * MetaMask's bundled Infura URL shows "Unable to connect to Sepolia" /
- * `Infura eth_getCode: Unauthorized` and blocks every send/approve.
- *
- * Matches MetaMask E2E: AddEditNetworkPage.selectRpcUrlAndSave +
- * NetworksPage.openNetworkRPC/selectRPC.
+ * Edit built-in Sepolia → add/select HTTPS RPC in the form → Save.
+ * Matches MetaMask E2E `AddEditNetworkPage.selectRpcUrlAndSave`.
+ * Never creates a second network with chainId 11155111.
  */
-async function configureSepoliaRpc(page: Page, rpcUrl: string): Promise<void> {
-  const rpcLabel = sepoliaRpcLabel(rpcUrl);
-
-  const optionsBtn = page.locator(SEPOLIA_OPTIONS_BUTTON).first();
-  await optionsBtn.scrollIntoViewIfNeeded().catch(() => {});
-  await optionsBtn.waitFor({ state: 'visible', timeout: 20_000 });
-  await optionsBtn.click({ timeout: 10_000 });
+async function setActiveHttpsRpc(page: Page, preferredRpc: string): Promise<string> {
+  const options = page.locator(SEPOLIA_OPTIONS).first();
+  await options.scrollIntoViewIfNeeded().catch(() => {});
+  await options.waitFor({ state: 'visible', timeout: 15_000 });
+  await options.click({ timeout: 10_000 });
   await page.locator('[data-testid="network-list-item-options-edit"]').click({ timeout: 10_000 });
 
-  const rpcDropdown = page.locator('[data-testid="test-add-rpc-drop-down"]');
-  await rpcDropdown.waitFor({ state: 'visible', timeout: 15_000 });
-  await rpcDropdown.click({ timeout: 10_000 });
+  await page.locator('[data-testid="test-add-rpc-drop-down"]').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('[data-testid="test-add-rpc-drop-down"]').click({ timeout: 10_000 });
 
-  const labeledRpc = page.getByRole('button', { name: rpcLabel });
-  if (await labeledRpc.isVisible({ timeout: 2_000 }).catch(() => false)) {
-    await labeledRpc.click({ timeout: 10_000 });
+  // At most 3 URLs — do not thrash the form.
+  const candidates = [
+    preferredRpc,
+    ...sepoliaRpcCandidates().filter((u) => u !== preferredRpc),
+  ].slice(0, 3);
+  let active = preferredRpc;
+  const already = page.getByRole('button', { name: rpcNickname(preferredRpc) });
+  if (await already.isVisible({ timeout: 1_500 }).catch(() => false)) {
+    await already.click({ timeout: 10_000 });
   } else {
     await page.getByRole('button', { name: /add rpc url/i }).click({ timeout: 10_000 });
-    const rpcInput = page.locator('[data-testid="rpc-url-input-test"]');
-    const nameInput = page.locator('[data-testid="rpc-name-input-test"]');
-    await rpcInput.waitFor({ state: 'visible', timeout: 10_000 });
-    // LavaMoat scuttles page.evaluate on extension pages — use Playwright fill only.
-    await rpcInput.fill(rpcUrl);
-    await nameInput.fill(rpcLabel);
-    await nameInput.press('Tab');
-
-    const addUrlBtn = page.getByRole('button', { name: /^add url$/i });
-    const deadline = Date.now() + 45_000;
-    while (Date.now() < deadline && !(await addUrlBtn.isEnabled().catch(() => false))) {
-      await page.waitForTimeout(300);
-    }
-    if (!(await addUrlBtn.isEnabled().catch(() => false))) {
-      const body = (await page.locator('body').innerText().catch(() => '')).slice(0, 600);
-      throw new Error(`[wallets/metamask] Add URL stayed disabled for ${rpcUrl}. UI:\n${body}`);
-    }
-    await addUrlBtn.click({ timeout: 10_000 });
-
-    const hidden = await rpcInput
-      .waitFor({ state: 'hidden', timeout: 30_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!hidden) {
-      // Retry once — first click sometimes no-ops while chain-id validation is in flight.
-      if (await addUrlBtn.isEnabled().catch(() => false)) {
-        await addUrlBtn.click({ timeout: 5_000 }).catch(() => {});
-        await rpcInput.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    let accepted: string | undefined;
+    const rejected: string[] = [];
+    for (const url of candidates) {
+      if (await submitRpcUrlForm(page, url)) {
+        accepted = url;
+        break;
       }
+      rejected.push(url);
+      await page.locator('[data-testid="rpc-url-input-test"]').fill('').catch(() => {});
     }
-    if (await rpcInput.isVisible().catch(() => false)) {
-      const body = (await page.locator('body').innerText().catch(() => '')).slice(0, 600);
+    if (!accepted) {
       throw new Error(
-        `[wallets/metamask] Add RPC form did not close after save for ${rpcUrl}. UI:\n${body}`,
+        `[wallets/metamask] Edit Sepolia RPC failed (tried ${rejected.join(', ')}). UI:\n${await bodySnippet(page)}`,
       );
+    }
+    active = accepted;
+    // After Add URL, re-open dropdown and pick the nick so it is the form's selected RPC.
+    const nick = rpcNickname(active);
+    const dropdown = page.locator('[data-testid="test-add-rpc-drop-down"]');
+    if (await dropdown.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await dropdown.click({ timeout: 5_000 }).catch(() => {});
+      const pick = page.getByRole('button', { name: nick });
+      if (await pick.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await pick.click({ timeout: 5_000 });
+      }
     }
   }
 
   const save = page.locator('[data-testid="page-container-footer-next"]');
   await save.waitFor({ state: 'visible', timeout: 15_000 });
-  if (await save.isEnabled().catch(() => true)) {
-    await save.click({ timeout: 10_000 });
+  if (!(await save.isEnabled().catch(() => false))) {
+    throw new Error(
+      `[wallets/metamask] Sepolia edit Save stayed disabled after setting RPC=${active}. UI:\n${await bodySnippet(page)}`,
+    );
   }
-  await page.waitForTimeout(1_000);
-
-  const formBack = page.locator('[data-testid="networks-page-form-back-button"]');
-  if (await formBack.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await formBack.click({ timeout: 5_000 }).catch(() => {});
-    await page.waitForTimeout(500);
-  }
-
-  const rpcNameBtn = page
-    .locator(
-      `[data-testid="network-rpc-name-button-${SEPOLIA_CAIP}"], [data-testid="network-rpc-name-button-${SEPOLIA_HEX}"]`,
-    )
-    .first();
-  await rpcNameBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await rpcNameBtn.click({ timeout: 10_000 });
-  await page.getByText(/select rpc url/i).waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-  const pick = page.getByRole('button', { name: rpcLabel }).or(page.getByText(rpcLabel, { exact: true }));
-  await pick.first().click({ timeout: 15_000 });
-  await page.waitForTimeout(800);
+  await save.click({ timeout: 10_000 });
+  // Wait until edit form is gone (back on Manage networks list).
+  await page
+    .locator('[data-testid="networks-page-add-custom-network-button"]')
+    .waitFor({ state: 'visible', timeout: 20_000 })
+    .catch(async () => {
+      await page.locator('[data-testid="networks-page-form-back-button"]').click({ timeout: 5_000 }).catch(() => {});
+    });
+  await page.waitForTimeout(500);
+  return active;
 }
 
-async function selectSepoliaFromPicker(page: Page): Promise<void> {
-  if (await isOnSepoliaNetwork(page)) return;
+/** Open home network picker → click built-in Sepolia. */
+async function switchNetwork(page: Page): Promise<void> {
+  const label = (await page.locator('[data-testid="sort-by-networks"]').innerText().catch(() => '')).toLowerCase();
+  if (label.includes('sepolia')) return;
 
   await page.locator('[data-testid="sort-by-networks"]').click({ timeout: 15_000 });
   await page.locator('[data-testid="home-network-filter-all-default"]').waitFor({
@@ -480,20 +414,13 @@ async function selectSepoliaFromPicker(page: Page): Promise<void> {
     timeout: 10_000,
   });
 
-  const byHex = page.locator(SEPOLIA_MODAL_LIST_ITEM);
-  const byName = page.locator(`[data-testid="${SEPOLIA_NETWORK_NAME}"]`);
-  if (await byHex.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await byHex.click({ timeout: 10_000 });
-  } else if (await byName.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await byName.click({ timeout: 10_000 });
-  } else {
-    const body = (await page.locator('body').innerText().catch(() => '')).slice(0, 500);
+  const item = page.locator(SEPOLIA_MODAL_ITEM);
+  if (!(await item.isVisible({ timeout: 5_000 }).catch(() => false))) {
     throw new Error(
-      `[wallets/metamask] Sepolia not in home network modal (expected ${SEPOLIA_MODAL_LIST_ITEM}). ` +
-        `Enable Show test networks first. Modal text: ${body}`,
+      `[wallets/metamask] Sepolia missing from picker (enable Show test networks first). UI:\n${await bodySnippet(page)}`,
     );
   }
-
+  await item.click({ timeout: 10_000 });
   await page.locator('[data-testid="sort-by-networks"]').filter({ hasText: /sepolia/i }).waitFor({
     state: 'visible',
     timeout: 30_000,
@@ -501,54 +428,35 @@ async function selectSepoliaFromPicker(page: Page): Promise<void> {
 }
 
 /**
- * MetaMask-official Sepolia switch:
- * 1. Manage networks → enable Show test networks (never disable)
- * 2. Ensure Sepolia exists (popular add, else custom with public RPC)
- * 3. Always replace Infura RPC with a probed public no-auth HTTPS endpoint
- * 4. Home network modal → select Sepolia by HEX list item `0xaa36a7`
+ * Leather-shaped: enable preset → point at working RPC → select it.
+ * Never Add custom network for Sepolia (chain already exists).
  */
 async function ensureSepoliaNetwork(context: BrowserContext): Promise<void> {
-  // Localhost proxy → public Sepolia (MetaMask test build Infura key is 000…0 / Unauthorized;
-  // HTTPS public RPCs often fail MetaMask's in-extension "fetch chain ID" check).
-  const workingRpc = await getMetaMaskSepoliaRpcUrl();
+  const preferredRpc = await resolveWorkingSepoliaRpc();
   const { page, extensionId } = await getUnlockedHomePage(context);
 
   await openManageNetworks(page);
   await ensureShowTestNetworksEnabled(page);
+  await waitForSepoliaListed(page);
 
-  if (!(await waitForSepoliaListedOnNetworksPage(page, 5_000))) {
-    if (!(await addPopularSepoliaIfOffered(page))) {
-      if (!(await waitForSepoliaListedOnNetworksPage(page, 3_000))) {
-        await addCustomSepoliaNetwork(page, workingRpc);
-      }
-    }
+  const activeRpc = await setActiveHttpsRpc(page, preferredRpc);
+  await goHome(page, extensionId);
+
+  const { page: home } = await getUnlockedHomePage(context);
+  await switchNetwork(home);
+
+  const homeText = (await home.locator('body').innerText().catch(() => '')).toLowerCase();
+  const onSepolia = (
+    await home.locator('[data-testid="sort-by-networks"]').innerText().catch(() => '')
+  )
+    .toLowerCase()
+    .includes('sepolia');
+  if (!onSepolia) {
+    throw new Error(`[wallets/metamask] Not on Sepolia after switch. RPC=${activeRpc}`);
   }
-
-  if (!(await waitForSepoliaListedOnNetworksPage(page, 10_000))) {
-    throw new Error(
-      '[wallets/metamask] Sepolia still missing after Show test networks + popular/custom add.',
-    );
-  }
-
-  // Popular / built-in Sepolia defaults to Infura (auth prompt). Always set public RPC.
-  await configureSepoliaRpc(page, workingRpc);
-  await closeManageNetworks(page, extensionId);
-
-  const { page: homePage } = await getUnlockedHomePage(context);
-  await selectSepoliaFromPicker(homePage);
-
-  if (!(await isOnSepoliaNetwork(homePage))) {
-    throw new Error(
-      `[wallets/metamask] switchToTestnetNetwork failed — home still not on Sepolia after select. RPC=${workingRpc}`,
-    );
-  }
-
-  // Fail fast if MetaMask is still stuck on Infura after our RPC swap.
-  const homeText = (await homePage.locator('body').innerText().catch(() => '')).toLowerCase();
   if (homeText.includes('unable to connect') || homeText.includes('infura')) {
     throw new Error(
-      `[wallets/metamask] Sepolia label is set but MetaMask cannot reach the chain (still Infura?). ` +
-        `Configured RPC=${workingRpc}. Home text snippet: ${homeText.slice(0, 300)}`,
+      `[wallets/metamask] Sepolia selected but RPC unreachable. RPC=${activeRpc}. Home: ${homeText.slice(0, 280)}`,
     );
   }
 }
@@ -575,18 +483,34 @@ async function clickConnectApprove(popup: Page): Promise<void> {
 
 async function clickTransactionConfirm(popup: Page): Promise<void> {
   const redesignConfirm = popup.locator('[data-testid="confirm-footer-button"]');
-  if (await redesignConfirm.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await redesignConfirm.click();
-    return;
-  }
   const legacyConfirm = popup.locator('[data-testid="confirmation-submit-button"]');
-  if (await legacyConfirm.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await legacyConfirm.click();
-    return;
-  }
   const footerNext = popup.locator('[data-testid="page-container-footer-next"]');
-  await footerNext.waitFor({ state: 'visible', timeout: 10_000 });
-  await footerNext.click();
+  const confirm = redesignConfirm.or(legacyConfirm).or(footerNext).first();
+
+  await confirm.waitFor({ state: 'visible', timeout: 30_000 });
+  const deadline = Date.now() + 45_000;
+  while (Date.now() < deadline) {
+    if (await confirm.isEnabled().catch(() => false)) {
+      await confirm.click({ timeout: 10_000 });
+      return;
+    }
+    const text = (await popup.locator('body').innerText().catch(() => '')).toLowerCase();
+    if (
+      text.includes('unable to connect') ||
+      text.includes('unauthorized') ||
+      text.includes('infura') ||
+      text.includes('transaction failed') ||
+      text.includes('alert')
+    ) {
+      throw new Error(
+        `[wallets/metamask] confirmTransaction blocked (likely bad RPC). UI:\n${text.slice(0, 400)}`,
+      );
+    }
+    await popup.waitForTimeout(400);
+  }
+  throw new Error(
+    `[wallets/metamask] Confirm stayed disabled (gas/RPC). UI:\n${(await popup.locator('body').innerText().catch(() => '')).slice(0, 400)}`,
+  );
 }
 
 async function verifyUnlockedAddress(
@@ -640,10 +564,8 @@ async function verifyUnlockedAddress(
  * Connect popup: `confirm-btn` (redesigned multichain connect) or fallback `page-container-footer-next`
  * Transaction popup: `confirm-footer-button` or fallback `confirmation-submit-button` / `page-container-footer-next`
  *
- * Network switch (MetaMask official selectors): Manage networks → enable Show test
- * networks → ensure Sepolia listed → replace Infura RPC with probed public HTTPS RPC →
- * home modal select via HEX list item `network-list-item-0xaa36a7`.
- * only after popular add (Infura default); existing listed Sepolia is used as-is.
+ * Network switch: Show test networks → edit built-in Sepolia RPC (HTTPS) →
+ * home picker `network-list-item-0xaa36a7`. Never Add custom network (chain exists).
  */
 export const metamaskDriver: WalletDriver = {
   async importWallet(context: BrowserContext, seedPhrase: string): Promise<WalletAccount> {

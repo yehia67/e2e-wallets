@@ -30,4 +30,4 @@ WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm --filter @wallets-e2e/example-metamask-spik
 
 `deployed.sepolia.json` and `public/deployed.sepolia.json` are gitignored — regenerate after redeploy.
 
-Sepolia RPC defaults to `https://ethereum-sepolia-rpc.publicnode.com` (no API key / no login), with failover to other public endpoints.
+Sepolia RPC defaults to `https://0xrpc.io/sep` (probe-verified, no API key). The driver edits built-in Sepolia — it does not add a custom network. Override with `WALLETS_E2E_SEPOLIA_RPC_URL`.

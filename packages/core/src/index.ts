@@ -151,76 +151,108 @@ export const STACKS_NETWORK_RPC_URLS: Record<StacksNetwork, string> = {
 export const TESTNET_RPC_URL: string = STACKS_NETWORK_RPC_URLS.testnet4;
 
 /**
- * Public Sepolia HTTPS RPCs — no signup, no API key, no HTTP basic auth.
- * Never use MetaMask's bundled Infura URL (triggers Chrome username/password prompts).
- * Prefer endpoints that support eth_call (1rpc free tier can reject calls).
+ * Public Sepolia HTTPS RPCs — curl-verified (eth_chainId + eth_blockNumber + eth_gasPrice +
+ * eth_getBalance), no API key, no Cloudflare/security interstitial.
+ * Banned: Infura (dead test-build key), ethpandaops (browser security check), Tenderly public
+ * (rate-limits eth_sendRawTransaction). Override with WALLETS_E2E_SEPOLIA_RPC_URL.
  */
 export const SEPOLIA_RPC_URLS = [
-  'https://ethereum-sepolia-rpc.publicnode.com',
   'https://0xrpc.io/sep',
-  'https://rpc.sentio.xyz/sepolia',
+  'https://eth-sepolia-testnet.api.pocket.network',
   'https://ethereum-sepolia-public.nodies.app',
-  'https://sepolia.gateway.tenderly.co',
-  'https://ethereum-sepolia.publicnode.com',
+  'https://sepolia.rpc.sentio.xyz',
+  'https://ethereum-sepolia.gateway.tatum.io',
 ] as const;
 
 /** Default Sepolia JSON-RPC endpoint for EVM transaction confirmation polling. */
 export const SEPOLIA_RPC_URL: string =
   process.env.WALLETS_E2E_SEPOLIA_RPC_URL?.trim() || SEPOLIA_RPC_URLS[0];
 
-/** Returns true when the endpoint responds with Sepolia chain id `0xaa36a7` and accepts eth_call. */
+/** Returns true when the endpoint is plain JSON-RPC Sepolia — rejects HTML/security walls. */
 export async function probeSepoliaRpc(rpcUrl: string, timeoutMs = 12_000): Promise<boolean> {
   try {
-    const chainRes = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!chainRes.ok) return false;
-    const chainBody = (await chainRes.json()) as { result?: string; error?: { message?: string } };
-    if (chainBody.error?.message || chainBody.result !== '0xaa36a7') return false;
+    const host = new URL(rpcUrl).hostname.toLowerCase();
+    // Known to pass Node fetch but fail MetaMask (Cloudflare / browser challenge).
+    if (host.includes('ethpandaops.io')) return false;
 
-    // eth_chainId alone is not enough — some "free" endpoints reject eth_call.
-    const callRes = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'eth_blockNumber',
-        params: [],
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!callRes.ok) return false;
-    const callBody = (await callRes.json()) as { result?: string; error?: { message?: string } };
-    const err = (callBody.error?.message ?? '').toLowerCase();
-    if (err.includes('free plan') || err.includes('unauthorized') || err.includes('api key')) {
+    const post = async (method: string, params: unknown[]) => {
+      const res = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: AbortSignal.timeout(timeoutMs),
+        redirect: 'manual',
+      });
+      if (res.status === 401 || res.status === 403 || res.status === 429) return null;
+      if (res.status >= 300 && res.status < 400) return null;
+      if (!res.ok) return null;
+      const text = await res.text();
+      const lower = text.toLowerCase();
+      if (
+        text.trimStart().startsWith('<!') ||
+        lower.includes('just a moment') ||
+        lower.includes('cf-browser-verification') ||
+        lower.includes('attention required') ||
+        lower.includes('enable javascript') ||
+        lower.includes('security check')
+      ) {
+        return null;
+      }
+      try {
+        return JSON.parse(text) as { result?: string; error?: { message?: string } };
+      } catch {
+        return null;
+      }
+    };
+
+    const chainBody = await post('eth_chainId', []);
+    if (!chainBody?.result || chainBody.error?.message || chainBody.result !== '0xaa36a7') return false;
+
+    const blockBody = await post('eth_blockNumber', []);
+    if (!blockBody?.result) return false;
+    const err = (blockBody.error?.message ?? '').toLowerCase();
+    if (
+      err.includes('free plan') ||
+      err.includes('unauthorized') ||
+      err.includes('api key') ||
+      err.includes('rate limit') ||
+      err.includes('too many requests')
+    ) {
       return false;
     }
-    return Boolean(callBody.result);
+
+    const gasBody = await post('eth_gasPrice', []);
+    return Boolean(gasBody?.result);
   } catch {
     return false;
   }
 }
 
-/** Pick the first reachable Sepolia RPC (env override wins when healthy). */
-export async function resolveWorkingSepoliaRpc(): Promise<string> {
+/** Ordered HTTPS candidates for MetaMask UI failover (env override first when set). */
+export function sepoliaRpcCandidates(): string[] {
   const candidates = [
     process.env.WALLETS_E2E_SEPOLIA_RPC_URL?.trim(),
     ...SEPOLIA_RPC_URLS,
   ].filter((url): url is string => Boolean(url));
+  return [...new Set(candidates)];
+}
 
+/** Pick the first reachable Sepolia RPC (env override wins when healthy). */
+export async function resolveWorkingSepoliaRpc(): Promise<string> {
   const seen = new Set<string>();
-  for (const url of candidates) {
+  const tried: string[] = [];
+  for (const url of sepoliaRpcCandidates()) {
     if (seen.has(url)) continue;
     seen.add(url);
+    tried.push(url);
     if (await probeSepoliaRpc(url)) return url;
   }
 
   throw new Error(
-    `[packages/core] No working Sepolia RPC found. Tried: ${[...seen].join(', ')}`,
+    `[packages/core] No working Sepolia RPC found. Tried: ${tried.join(', ')}`,
   );
 }
 
