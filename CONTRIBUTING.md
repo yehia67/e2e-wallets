@@ -10,9 +10,11 @@ Thanks for considering it — this project is early and could genuinely use help
 git clone https://github.com/yehia67/e2e-wallets.git
 cd e2e-wallets
 pnpm install
-pnpm build:leather   # builds the real Leather extension from source (idempotent). REQUIRED --
-                     # nothing in `pnpm build` does it, and without it the browser suites skip
-                     # themselves rather than fail.
+pnpm build:leather   # builds the real Leather extension from source (idempotent). REQUIRED for
+                     # Leather browser suites — nothing in `pnpm build` does it, and without it
+                     # those suites skip themselves rather than fail.
+pnpm build:metamask  # downloads/builds the real MetaMask test extension (idempotent). REQUIRED for
+                     # `examples/metamask-spike` — same skip-if-not-built pattern as Leather.
 pnpm build
 pnpm test            # `node --test` unit tests, then real Chromium windows driving the real
                      # extension -- expect browser popups, and a real testnet transaction
@@ -33,9 +35,10 @@ Every wallet extension this project supports is driven the same way, through one
     importWallet(context: BrowserContext, seedPhrase: string): Promise<WalletAccount>;
     connectToDapp(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
     confirmTransaction(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
+    confirmSignature?(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
   }
   ```
-  `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural.
+  `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural. `wallets/metamask` is the second adapter (Ethereum / Sepolia via MetaMask's test build).
 - **`examples/spike`** holds the actual Playwright tests that exercise a driver end to end. **`examples/react-connect`** is a real dapp with a real `@stacks/connect` integration, and **`examples/bdd`** drives that same dapp from Gherkin `.feature` files through the step library in `packages/core/src/bdd/`.
 
 ## Adding a new wallet adapter
@@ -45,6 +48,22 @@ Every wallet extension this project supports is driven the same way, through one
 3. Implement `importWallet` first, and get it passing against a real test before touching `connectToDapp`/`confirmTransaction`. **Inspect the real onboarding flow before automating it — don't guess at selectors, screen order, or validation rules (e.g., minimum password strength, exact word count).** A small standalone Node script that launches the extension headed and dumps page text/button labels at each step is the fastest way to do this; see the shape of the driver's own comments for the kind of thing worth writing down once you find it (e.g. "defaults to a 24-word seed screen," "Continue stays disabled below a password-strength threshold").
 4. Write the equivalent of `examples/spike`'s test for the new wallet, covering at minimum: happy path, a missing-build error case, and a malformed-input error case that must fail loudly rather than silently reporting success.
 5. Verify the address/account your driver returns against an independent derivation (e.g. via `@stacks/wallet-sdk`) rather than trusting that "the UI flow completed" means it actually worked.
+
+### MetaMask (Sepolia) setup
+
+MetaMask's fixture wallet has **no checked-in seed phrase** — you must generate one locally:
+
+```bash
+node wallets/metamask/scripts/generate-fixture-wallet.mjs   # prints a Sepolia funding address
+# Fund that address on Sepolia (e.g. https://sepoliafaucet.com/) before send/deposit tests.
+# Do NOT `source wallets/metamask/.env.local` — seed phrases contain spaces; tests load it via fixtures/wallet.ts.
+pnpm build:metamask
+cd examples/metamask-spike && forge build && cd ../../..      # ERC20 spike contracts
+node examples/metamask-spike/scripts/deploy-sepolia.mjs       # deploy token + vault, mint WET
+pnpm --filter @wallets-e2e/example-metamask-spike test
+```
+
+The script writes `wallets/metamask/.env.local` (gitignored). Never commit seed phrases or that file.
 
 ## A few hard-won lessons worth knowing before you start
 

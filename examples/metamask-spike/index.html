@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MetaMask Spike Dapp</title>
+  </head>
+  <body>
+    <h1>MetaMask Sepolia Spike</h1>
+    <button data-testid="connect-wallet">Connect</button>
+    <button data-testid="send-eth">Send 0.0001 ETH</button>
+    <hr />
+    <h2>ERC20 deposit</h2>
+    <button data-testid="approve-token">1. Approve token</button>
+    <button data-testid="deposit-after-approve">2. Deposit (after approve)</button>
+    <button data-testid="deposit-permit-sign">1. Sign permit</button>
+    <button data-testid="deposit-permit-submit">2. Deposit with permit</button>
+    <p data-testid="connected-address"></p>
+    <p data-testid="tx-hash"></p>
+    <p data-testid="deposit-status"></p>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

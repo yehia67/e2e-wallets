@@ -203,6 +203,17 @@ export function createWalletSteps(options: CreateWalletStepsOptions) {
     await wallet.confirmTransaction(context, trigger);
   });
 
+  When('I approve the wallet signature popup', async ({ context }: WalletStepFixtures) => {
+    const wallet = requireDriver(driver);
+    if (!wallet.confirmSignature) {
+      throw new Error(
+        `[@wallets-e2e/core/bdd] Driver has no confirmSignature() — EIP-712 / permit flows need it.`,
+      );
+    }
+    const trigger = takeWalletTrigger(context);
+    await wallet.confirmSignature(context, trigger);
+  });
+
   // "The popup closed" is never proof a transaction landed — this polls the chain for real.
   Then('the transaction is mined', async ({ context }: WalletStepFixtures) => {
     const txid = requireTransactionId(context);

@@ -1,0 +1,24 @@
+{
+  "name": "@wallets-e2e/example-metamask-bdd",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gherkin .feature specs driving the real MetaMask extension on Sepolia through @wallets-e2e/core/bdd, against examples/metamask-spike.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "bddgen && playwright test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^22.7.5",
+    "@wallets-e2e/core": "workspace:*",
+    "@wallets-e2e/example-metamask-spike": "workspace:*",
+    "@wallets-e2e/metamask": "workspace:*",
+    "playwright-bdd": "^9.2.0",
+    "typescript": "^5.6.3",
+    "viem": "^2.55.19"
+  }
+}

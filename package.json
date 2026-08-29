@@ -31,6 +31,7 @@
   "scripts": {
     "build": "turbo run build",
     "build:leather": "pnpm --filter @wallets-e2e/leather build:extension",
+    "build:metamask": "pnpm --filter @wallets-e2e/metamask build:extension",
     "test": "turbo run test"
   },
   "devDependencies": {

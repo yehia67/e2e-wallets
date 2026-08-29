@@ -95,6 +95,8 @@ export interface WalletDriver {
   connectToDapp(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
   /** Story 1.3 — approves a transaction-signing request that opens in the extension's popup. */
   confirmTransaction(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
+  /** EIP-712 / typed-data signatures (e.g. ERC20 permit) — distinct from on-chain transaction confirmations. */
+  confirmSignature?(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
 }
 
 /**
@@ -147,6 +149,148 @@ export const STACKS_NETWORK_RPC_URLS: Record<StacksNetwork, string> = {
  * this constant is only the default, not a hardcoded requirement.
  */
 export const TESTNET_RPC_URL: string = STACKS_NETWORK_RPC_URLS.testnet4;
+
+/**
+ * Public Sepolia HTTPS RPCs — no signup, no API key, no HTTP basic auth.
+ * Never use MetaMask's bundled Infura URL (triggers Chrome username/password prompts).
+ * Prefer endpoints that support eth_call (1rpc free tier can reject calls).
+ */
+export const SEPOLIA_RPC_URLS = [
+  'https://ethereum-sepolia-rpc.publicnode.com',
+  'https://0xrpc.io/sep',
+  'https://rpc.sentio.xyz/sepolia',
+  'https://ethereum-sepolia-public.nodies.app',
+  'https://sepolia.gateway.tenderly.co',
+  'https://ethereum-sepolia.publicnode.com',
+] as const;
+
+/** Default Sepolia JSON-RPC endpoint for EVM transaction confirmation polling. */
+export const SEPOLIA_RPC_URL: string =
+  process.env.WALLETS_E2E_SEPOLIA_RPC_URL?.trim() || SEPOLIA_RPC_URLS[0];
+
+/** Returns true when the endpoint responds with Sepolia chain id `0xaa36a7` and accepts eth_call. */
+export async function probeSepoliaRpc(rpcUrl: string, timeoutMs = 12_000): Promise<boolean> {
+  try {
+    const chainRes = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!chainRes.ok) return false;
+    const chainBody = (await chainRes.json()) as { result?: string; error?: { message?: string } };
+    if (chainBody.error?.message || chainBody.result !== '0xaa36a7') return false;
+
+    // eth_chainId alone is not enough — some "free" endpoints reject eth_call.
+    const callRes = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'eth_blockNumber',
+        params: [],
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!callRes.ok) return false;
+    const callBody = (await callRes.json()) as { result?: string; error?: { message?: string } };
+    const err = (callBody.error?.message ?? '').toLowerCase();
+    if (err.includes('free plan') || err.includes('unauthorized') || err.includes('api key')) {
+      return false;
+    }
+    return Boolean(callBody.result);
+  } catch {
+    return false;
+  }
+}
+
+/** Pick the first reachable Sepolia RPC (env override wins when healthy). */
+export async function resolveWorkingSepoliaRpc(): Promise<string> {
+  const candidates = [
+    process.env.WALLETS_E2E_SEPOLIA_RPC_URL?.trim(),
+    ...SEPOLIA_RPC_URLS,
+  ].filter((url): url is string => Boolean(url));
+
+  const seen = new Set<string>();
+  for (const url of candidates) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+    if (await probeSepoliaRpc(url)) return url;
+  }
+
+  throw new Error(
+    `[packages/core] No working Sepolia RPC found. Tried: ${[...seen].join(', ')}`,
+  );
+}
+
+/** What `eth_getTransactionReceipt` reports once an EVM transaction is mined (or still pending). */
+export type EthTxReceiptStatus = 'pending' | 'success' | 'reverted';
+
+/**
+ * Polls an Ethereum JSON-RPC endpoint by transaction hash until a receipt exists (or timeout).
+ * Minimal EVM counterpart to `waitForTransactionMined` — never trust "the popup closed" alone.
+ */
+export async function waitForEthTransactionMined(
+  txHash: string,
+  options: { rpcUrl?: string; timeoutMs?: number; pollIntervalMs?: number } = {},
+): Promise<EthTxReceiptStatus> {
+  const { timeoutMs = 5 * 60_000, pollIntervalMs = 3_000 } = options;
+  const rpcCandidates = options.rpcUrl
+    ? [options.rpcUrl]
+    : await (async () => {
+        try {
+          return [await resolveWorkingSepoliaRpc()];
+        } catch {
+          return [...SEPOLIA_RPC_URLS];
+        }
+      })();
+
+  const deadline = Date.now() + timeoutMs;
+  const normalizedHash = txHash.startsWith('0x') ? txHash : `0x${txHash}`;
+  let rpcIndex = 0;
+
+  while (Date.now() < deadline) {
+    const rpcUrl = rpcCandidates[rpcIndex] ?? SEPOLIA_RPC_URL;
+    try {
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_getTransactionReceipt',
+          params: [normalizedHash],
+        }),
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const body = (await response.json()) as {
+        result?: { status?: string } | null;
+        error?: { message?: string };
+      };
+      if (body.error) {
+        throw new Error(body.error.message ?? 'unknown RPC error');
+      }
+      if (body.result) {
+        const statusHex = body.result.status ?? '0x1';
+        return statusHex === '0x1' ? 'success' : 'reverted';
+      }
+    } catch (error) {
+      if (rpcIndex < rpcCandidates.length - 1) {
+        rpcIndex += 1;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  throw new Error(
+    `[packages/core] Transaction ${normalizedHash} was not mined within ${timeoutMs}ms — ` +
+      `the chain may be congested, or the transaction was never broadcast.`,
+  );
+}
 
 /** What the Stacks API's `/extended/v1/tx/:txid` endpoint reports for a transaction's fate. */
 export type StacksTxStatus =
