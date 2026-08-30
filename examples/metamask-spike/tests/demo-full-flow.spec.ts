@@ -127,5 +127,16 @@ test.describe('live Sepolia uninterrupted acceptance flow', () => {
     if (dappVideo) {
       writeFileSync(join(import.meta.dirname, '../test-results/demo-video-path.txt'), dappVideo);
     }
+
+    const manifest = [];
+    for (const page of extensionContext.pages()) {
+      if (page.isClosed()) continue;
+      const video = await page.video()?.path();
+      if (video) manifest.push({ url: page.url(), video });
+    }
+    writeFileSync(
+      join(import.meta.dirname, '../test-results/demo-pages.json'),
+      JSON.stringify(manifest, null, 2),
+    );
   });
 });

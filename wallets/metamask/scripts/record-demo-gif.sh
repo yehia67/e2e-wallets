@@ -49,14 +49,10 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   exit 1
 fi
 
-# Playback speed. The real run is ~90s of mostly waiting on Sepolia blocks; DEMO_SPEED collapses
-# that into something watchable at the top of a README.
-SPEED="${DEMO_SPEED:-4}"
-
+# Side-by-side: the dapp on the left, whichever MetaMask approval was on screen on the right.
+# DEMO_SPEED collapses the real ~90s run (mostly waiting on Sepolia blocks) into a watchable clip.
 OUT="$ROOT/docs/metamask-demo-full-flow.gif"
-ffmpeg -y -i "$LATEST" \
-  -vf "setpts=PTS/${SPEED},fps=12,scale=560:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff:max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" \
-  -loop 0 "$OUT"
+node "$ROOT/wallets/metamask/scripts/compose-demo-gif.mjs"
 
 mkdir -p "$ROOT/wallets/metamask/docs"
 cp "$OUT" "$ROOT/wallets/metamask/docs/metamask-demo-full-flow.gif"
