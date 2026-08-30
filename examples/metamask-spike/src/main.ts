@@ -73,12 +73,6 @@ async function getAccount(): Promise<`0x${string}`> {
   return accounts[0] as `0x${string}`;
 }
 
-/**
- * Best-effort nudge onto whichever chain the contracts were deployed to. The chain id comes from
- * `deployed.json`, never a literal — this page is not tied to one network any more than the driver
- * is. With nothing deployed there is nothing to nudge towards, and the wallet driver has already
- * selected the network anyway.
- */
 async function ensureDeployedChain(): Promise<void> {
   if (!window.ethereum) throw new Error('No injected wallet');
   let cfg: DeployedConfig;
@@ -96,7 +90,6 @@ async function ensureDeployedChain(): Promise<void> {
       params: [{ chainId: want }],
     });
   } catch {
-    // The driver already put MetaMask on the network; ignore if the dapp cannot prompt.
   }
 }
 
@@ -115,10 +108,10 @@ sendEthBtn!.addEventListener('click', async () => {
     const accounts = (await window.ethereum.request({ method: 'eth_accounts' })) as string[];
     const from = accounts[0];
     if (!from) throw new Error('Not connected — click Connect first');
-    const value = '0x5af3107a4000'; // 0.0001 ETH — enough for a smoke send without draining the faucet wallet
+    const value = '0x5af3107a4000';
     const txHash = (await window.ethereum.request({
       method: 'eth_sendTransaction',
-      // No explicit chainId: MetaMask signs on whatever network the driver selected.
+
       params: [{ from, to: from, value }] as unknown as [Record<string, string>],
     })) as string;
     txEl!.textContent = txHash;

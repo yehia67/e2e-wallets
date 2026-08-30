@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Parse wallets/metamask/.env.local when env vars are not already exported (seed phrases contain spaces). */
 function loadEnvLocalIfNeeded(): void {
   let dir = dirname(fileURLToPath(import.meta.url));
   let envPath: string | null = null;
@@ -34,17 +33,6 @@ function loadEnvLocalIfNeeded(): void {
 
 loadEnvLocalIfNeeded();
 
-/**
- * MetaMask E2E fixture wallet — env-var only (NFR1 / AD-5).
- *
- * Unlike Leather's fixture, there is NO checked-in default seed phrase. Set all three vars
- * locally (e.g. via `node wallets/metamask/scripts/generate-fixture-wallet.mjs`) before running
- * browser suites. If `WALLETS_E2E_SEED_PHRASE` is unset, importing this module throws immediately
- * — before Playwright launches a browser.
- *
- * `.env.local` is parsed automatically when present (seed phrases contain spaces — do not
- * `source` that file in bash without quoting).
- */
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {

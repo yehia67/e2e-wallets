@@ -6,19 +6,18 @@ import {
 import { metamaskDriver } from '@wallets-e2e/metamask';
 import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
 import { test, expect } from './fixtures.js';
-import { readVaultBalance, requireDeployedContracts } from './contracts.js';
+import {
+  readVaultBalance,
+  requireDeployedContracts,
+  waitForVaultBalanceIncrease,
+} from './contracts.js';
 
-/** The network under test — an argument to the driver, not baked into it. */
 const NETWORK = EVM_NETWORKS.sepolia;
 
 test.describe('ERC20 deposit via approve', () => {
-  test('approves token allowance and deposits into the vault', async ({ extensionContext }, testInfo) => {
-    test.skip(
-      process.env.WALLETS_E2E_RUN_SEPOLIA !== '1',
-      'Set WALLETS_E2E_RUN_SEPOLIA=1 to authorize a gas-spending Sepolia test.',
-    );
+  test('approves token allowance and deposits into the vault', async ({ extensionContext }) => {
     test.setTimeout(10 * 60 * 1000);
-    const deployed = requireDeployedContracts(testInfo);
+    const deployed = requireDeployedContracts();
     const depositAmount = BigInt(deployed.depositAmount);
 
     await metamaskDriver.importWallet(extensionContext, wallet.seedPhrase);
@@ -60,7 +59,13 @@ test.describe('ERC20 deposit via approve', () => {
     });
     expect(status).toBe('success');
 
-    const balanceAfter = await readVaultBalance(deployed.vaultAddress, wallet.address, requester);
+    const balanceAfter = await waitForVaultBalanceIncrease(
+      deployed.vaultAddress,
+      wallet.address,
+      balanceBefore,
+      depositAmount,
+      requester,
+    );
     expect(balanceAfter - balanceBefore).toBe(depositAmount);
   });
 });

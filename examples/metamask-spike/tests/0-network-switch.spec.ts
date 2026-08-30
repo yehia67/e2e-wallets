@@ -1,11 +1,3 @@
-/**
- * Focused MetaMask network switch — the blocker for connect/send.
- * Run alone: WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm exec playwright test tests/0-network-switch.spec.ts
- *
- * The network is data here, not identity: swap `TARGET_NETWORK` for any other `EvmNetwork` and the
- * same driver call has to work — a built-in chain uses its bundled provider, while a custom chain
- * is validated, added, and selected.
- */
 import { EVM_NETWORKS, chainIdToHex } from '@wallets-e2e/core';
 import { metamaskDriver } from '@wallets-e2e/metamask';
 import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
@@ -24,7 +16,6 @@ test(`applies ${TARGET_NETWORK.name} to the connected dapp origin`, async ({ ext
     await dapp.getByTestId('connect-wallet').click();
   });
 
-  // MetaMask's multichain home is an asset filter; the dapp provider is the authoritative signal.
   const chainId = await dapp.evaluate(
     async () =>
       (await (window as unknown as { ethereum?: { request: (a: unknown) => Promise<string> } }).ethereum?.request({

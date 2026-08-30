@@ -10,18 +10,13 @@ import { queueWalletTrigger, takeWalletTrigger } from '@wallets-e2e/core/bdd';
 import { metamaskDriver } from '@wallets-e2e/metamask';
 import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
 import { loadDeployedContracts, readVaultBalance, deployedContractsPath } from './contracts.js';
-import { expect, Given, Then, When, test } from './fixtures.js';
+import { expect, Given, Then, When } from './fixtures.js';
 
 const DEPLOYED_PATH = deployedContractsPath;
 
 let vaultBalanceBefore: bigint | null = null;
 let rpcRequester: EvmRpcRequester | null = null;
 
-/**
- * The networks a `.feature` sentence may name, keyed by the word a human writes. The Gherkin says
- * "Sepolia"; the driver is handed the whole `EvmNetwork` value, so adding another network here is
- * a one-line data change rather than new step code.
- */
 const NETWORKS_BY_WORD: Readonly<Record<string, EvmNetwork>> = {
   sepolia: EVM_NETWORKS.sepolia,
   mainnet: EVM_NETWORKS.mainnet,
@@ -111,9 +106,6 @@ Then('the EVM transaction is mined', async ({ page }) => {
 });
 
 Then('my vault balance increased by one token', async () => {
-  if (!existsSync(DEPLOYED_PATH)) {
-    test.skip();
-  }
   const deployed = loadDeployedContracts();
   const depositAmount = BigInt(deployed.depositAmount);
   const balanceAfter = await readVaultBalance(

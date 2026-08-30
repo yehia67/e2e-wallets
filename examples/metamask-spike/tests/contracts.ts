@@ -31,13 +31,26 @@ export function loadDeployedContracts(): DeployedContracts {
   return JSON.parse(readFileSync(DEPLOYED_PATH, 'utf8')) as DeployedContracts;
 }
 
-export function requireDeployedContracts(testInfo: { skip: (condition: boolean, reason: string) => void }): DeployedContracts {
-  const exists = existsSync(DEPLOYED_PATH);
-  testInfo.skip(
-    !exists,
-    'deployed.json missing — run: node examples/metamask-spike/scripts/deploy.mjs',
-  );
+export function requireDeployedContracts(): DeployedContracts {
   return loadDeployedContracts();
+}
+
+export async function waitForVaultBalanceIncrease(
+  vaultAddress: string,
+  userAddress: string,
+  balanceBefore: bigint,
+  expectedIncrease: bigint,
+  requester?: EvmRpcRequester,
+  timeoutMs = 60_000,
+): Promise<bigint> {
+  const deadline = Date.now() + timeoutMs;
+  let balance = balanceBefore;
+  while (Date.now() < deadline) {
+    balance = await readVaultBalance(vaultAddress, userAddress, requester);
+    if (balance - balanceBefore >= expectedIncrease) return balance;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  return balance;
 }
 
 export async function readVaultBalance(

@@ -1,17 +1,11 @@
 import { defineConfig } from '@playwright/test';
 
-/**
- * NFR2: Playwright's bundled Chromium only. FR7: video on every run.
- * The static dapp is served by Vite on port 3456 so MetaMask sees a real http:// origin.
- */
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
-  // Import (~25s) + network switch (~55s) + connect (~30s) is ~2 minutes of real-extension setup
-  // before a test's own assertions even begin. At 120s the connect spec failed on time alone.
-  // On-chain tests raise this further themselves.
+
   timeout: 300_000,
   use: {
     channel: 'chromium',

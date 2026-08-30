@@ -1,8 +1,3 @@
-/**
- * Single-session live acceptance: import → network → connect → ETH transfer → approve deposit →
- * EIP-2612 permit deposit. Runs only when WALLETS_E2E_RUN_SEPOLIA=1, or while recording the demo.
- * Do not generate a GIF from connect-only or partial runs.
- */
 import {
   EVM_NETWORKS,
   createInjectedEvmRpc,
@@ -11,20 +6,15 @@ import {
 import { metamaskDriver } from '@wallets-e2e/metamask';
 import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
 import { test, expect } from './fixtures.js';
-import { loadDeployedContracts, readVaultBalance } from './contracts.js';
+import {
+  loadDeployedContracts,
+  readVaultBalance,
+  waitForVaultBalanceIncrease,
+} from './contracts.js';
 
-/** The network under test — an argument to the driver, not baked into it. */
 const NETWORK = EVM_NETWORKS.sepolia;
 
-const isDemoRecording = process.env.WALLETS_E2E_RECORD_DEMO === '1';
-const isLiveSepolia = process.env.WALLETS_E2E_RUN_SEPOLIA === '1';
-
 test.describe('live Sepolia uninterrupted acceptance flow', () => {
-  test.skip(
-    !isDemoRecording && !isLiveSepolia,
-    'Set WALLETS_E2E_RUN_SEPOLIA=1 to authorize the gas-spending Sepolia flow.',
-  );
-
   test(`import → ${NETWORK.name} → connect → ETH → approve deposit → permit deposit`, async ({ extensionContext }) => {
     test.setTimeout(15 * 60 * 1000);
 
@@ -122,9 +112,11 @@ test.describe('live Sepolia uninterrupted acceptance flow', () => {
       }),
     ).toBe('success');
 
-    const vaultBalanceAfter = await readVaultBalance(
+    const vaultBalanceAfter = await waitForVaultBalanceIncrease(
       deployed.vaultAddress,
       wallet.address,
+      vaultBalanceBefore,
+      depositAmount * 2n,
       requester,
     );
     expect(vaultBalanceAfter - vaultBalanceBefore).toBe(depositAmount * 2n);

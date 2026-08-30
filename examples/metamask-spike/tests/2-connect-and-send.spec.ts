@@ -7,7 +7,6 @@ import { metamaskDriver } from '@wallets-e2e/metamask';
 import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
 import { test, expect } from './fixtures.js';
 
-/** The network under test — an argument to the driver, not baked into it. */
 const NETWORK = EVM_NETWORKS.sepolia;
 
 test.describe(`connecting the spike dapp to MetaMask on ${NETWORK.name}`, () => {
@@ -34,10 +33,6 @@ test.describe(`connecting the spike dapp to MetaMask on ${NETWORK.name}`, () => 
 
 test.describe(`sending ${NETWORK.name} ETH from the spike dapp`, () => {
   test('approves a 0.0001 ETH self-transfer and confirms it mined', async ({ extensionContext }) => {
-    test.skip(
-      process.env.WALLETS_E2E_RUN_SEPOLIA !== '1',
-      'Set WALLETS_E2E_RUN_SEPOLIA=1 to authorize a gas-spending Sepolia test.',
-    );
     test.setTimeout(10 * 60 * 1000);
 
     await metamaskDriver.importWallet(extensionContext, wallet.seedPhrase);
