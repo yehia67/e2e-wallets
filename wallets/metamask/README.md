@@ -2,10 +2,9 @@
 
 `WalletDriver` for the real [MetaMask](https://metamask.io) extension, pinned to the official **13.13.1 production artifact**, for **any EVM network**. Real import, real popups, real transactions. No mocking.
 
-Part of [wallets-e2e](https://github.com/yehia67/e2e-wallets).
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/yehia67/e2e-wallets/main/docs/metamask-demo-full-flow.gif" alt="Playwright driving the real MetaMask extension: import, connect, ERC20 approve, deposit, EIP-2612 permit deposit" width="600">
+  <img src="./docs/metamask-demo-full-flow.gif" alt="Playwright driving the real MetaMask extension: import, connect, ERC20 approve, deposit, EIP-2612 permit deposit" width="560">
 </p>
 
 One uninterrupted session: import → network → connect → send ETH → approve ERC20 → deposit → sign permit → deposit with permit. The GIF is a build artifact of a passing `demo-full-flow.spec.ts` — a failed run writes no GIF.

@@ -25,15 +25,22 @@ pnpm --filter @wallets-e2e/core build
 pnpm --filter @wallets-e2e/metamask build
 
 VIDEO_DIR="$SPIKE/test-results/videos"
-rm -f "$VIDEO_DIR"/*.webm 2>/dev/null || true
+POINTER="$SPIKE/test-results/demo-video-path.txt"
+rm -f "$VIDEO_DIR"/*.webm "$POINTER" 2>/dev/null || true
 
 cd "$SPIKE"
 pnpm exec playwright test tests/demo-full-flow.spec.ts
 
-# Full-flow video is the largest recording from this single-session run.
-LATEST="$(find "$VIDEO_DIR" -name '*.webm' -type f -print0 2>/dev/null | xargs -0 ls -S 2>/dev/null | head -1)"
-if [[ -z "$LATEST" ]]; then
-  echo "Demo test passed but no Playwright video found under $VIDEO_DIR"
+# The spec records which video belongs to the dapp page. Never pick by file size: MetaMask's
+# home page stays open for the whole run doing nothing, so its recording is always the largest
+# and produces a GIF of a motionless wallet screen.
+if [[ ! -f "$POINTER" ]]; then
+  echo "Demo test passed but $POINTER was not written — cannot identify the dapp recording."
+  exit 1
+fi
+LATEST="$(cat "$POINTER")"
+if [[ ! -f "$LATEST" ]]; then
+  echo "Demo video path recorded as $LATEST but that file does not exist."
   exit 1
 fi
 
@@ -42,9 +49,13 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   exit 1
 fi
 
+# Playback speed. The real run is ~90s of mostly waiting on Sepolia blocks; DEMO_SPEED collapses
+# that into something watchable at the top of a README.
+SPEED="${DEMO_SPEED:-4}"
+
 OUT="$ROOT/docs/metamask-demo-full-flow.gif"
 ffmpeg -y -i "$LATEST" \
-  -vf "fps=10,scale=560:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff:max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" \
+  -vf "setpts=PTS/${SPEED},fps=12,scale=560:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff:max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" \
   -loop 0 "$OUT"
 
 mkdir -p "$ROOT/wallets/metamask/docs"

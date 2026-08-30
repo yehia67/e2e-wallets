@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   EVM_NETWORKS,
   createInjectedEvmRpc,
@@ -120,5 +122,10 @@ test.describe('live Sepolia uninterrupted acceptance flow', () => {
       requester,
     );
     expect(vaultBalanceAfter - vaultBalanceBefore).toBe(depositAmount * 2n);
+
+    const dappVideo = await appPage.video()?.path();
+    if (dappVideo) {
+      writeFileSync(join(import.meta.dirname, '../test-results/demo-video-path.txt'), dappVideo);
+    }
   });
 });
