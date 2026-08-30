@@ -97,15 +97,12 @@ import { wallet } from '@wallets-e2e/leather/fixtures/wallet.js';
 import { test as base } from 'playwright-bdd';
 
 const EXTENSION_PATH = 'wallets/leather/dist'; // your unpacked build
-const REQUIRE_EXTENSION = process.env.WALLETS_E2E_REQUIRE_EXTENSION === '1';
 
 export const test = base.extend({
   context: async ({}, use, testInfo) => {
-    const built = existsSync(join(EXTENSION_PATH, 'manifest.json'));
-    if (!built && REQUIRE_EXTENSION) {
-      throw new Error(`Leather is not built at ${EXTENSION_PATH}`);
+    if (!existsSync(join(EXTENSION_PATH, 'manifest.json'))) {
+      throw new Error(`Leather is not built at ${EXTENSION_PATH}. Run: pnpm build:leather`);
     }
-    testInfo.skip(!built, 'Leather is not built yet');
 
     const userDataDir = mkdtempSync(join(tmpdir(), `wallets-e2e-${testInfo.testId}-`));
     try {
@@ -203,7 +200,7 @@ That `@timeout:` tag is playwright-bdd syntax, not product language. Keep it; wi
 
 **In the feature file:** what a product owner means — connected, requested a transfer, approved, saw a txid, mined.
 
-**Not in the feature file:** seed phrases, extension paths, `switchToTestnetNetwork`, raw `Page` / popup listeners. Those stay in fixtures and in `@wallets-e2e/core/bdd`.
+**Not in the feature file:** seed phrases, extension paths, `switchNetwork`, raw `Page` / popup listeners. Those stay in fixtures and in `@wallets-e2e/core/bdd`.
 
 Do **not** split connect into granular `Given I click connect` / `When I approve` pairs that put the click outside `trigger()` — that reopens the timeout trap the coarse step exists to hide.
 
@@ -294,7 +291,7 @@ Until you've done that, leave `workers: 1` and get your speed from the tier spli
 ### CI
 
 ```bash
-WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm test
+pnpm test
 ```
 
 Always set it. Without it, a CI job with no extension build reports green while skipping every scenario — a passing pipeline that tested nothing.
@@ -335,7 +332,7 @@ pnpm --filter @wallets-e2e/example-bdd test
 If Leather isn't built, scenarios **skip** rather than fail. For CI (or any run that must actually exercise the extension):
 
 ```bash
-WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm --filter @wallets-e2e/example-bdd test
+pnpm --filter @wallets-e2e/example-bdd test
 ```
 
 ## Still stuck?

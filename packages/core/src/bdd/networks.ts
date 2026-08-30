@@ -1,11 +1,20 @@
-import type { Chain, StacksNetwork } from '../index.js';
+import type { Chain, StacksNetwork, SupportedStacksNetwork } from '../index.js';
+
+// Re-exported so `@wallets-e2e/core/bdd` consumers keep importing it from where they always have;
+// it is defined next to the `WalletDriver` port in `../index.ts` so wallet packages can name it
+// without depending on the optional `playwright-bdd` peer this module pulls in.
+export type { SupportedStacksNetwork };
 
 /**
  * The chain words a `.feature` sentence may use, mapped onto core's `Chain`. This is a *sentence
- * vocabulary*, deliberately separate from `CHAIN` itself: what a product owner types in Gherkin
- * ("Stacks") and what the code calls the chain ("stacks") are allowed to drift apart, and a second
- * chain would add a word here rather than change `CHAIN`. Typed against `Chain` so a value that
- * isn't a real chain fails to compile.
+ * vocabulary*, deliberately separate from the `Chain` type itself: what a product owner types in
+ * Gherkin ("Stacks") and what the code calls the chain ("stacks") are allowed to drift apart.
+ * Typed against `Chain` so a value that isn't a real chain fails to compile.
+ *
+ * Deliberately Stacks-only even though `Chain` now includes `'evm'`: these steps resolve Stacks
+ * network words and poll a Stacks API, so accepting "Ethereum" here would produce a sentence that
+ * parses and then does the wrong thing. EVM scenarios drive their driver from their own steps
+ * (see `examples/metamask-bdd`).
  */
 const CHAIN_WORDS: Readonly<Record<string, Chain>> = {
   stacks: 'stacks',
@@ -15,11 +24,10 @@ const CHAIN_WORDS: Readonly<Record<string, Chain>> = {
  * The networks a `WalletDriver` can actually be put on today, and the sentence words that reach
  * them.
  *
- * This list is deliberately shorter than `StacksNetwork`. The driver port offers exactly one
- * network operation — `switchToTestnetNetwork` — so `mainnet` (leave the wallet alone) and
- * `testnet4` (call it) are the only two outcomes any driver can honour. `testnet` is the word a
- * human actually writes and resolves to `testnet4`, the preset Leather's own picker offers and the
- * one this project's tests are proven against.
+ * This list is deliberately shorter than `StacksNetwork`. `mainnet` (leave the wallet alone) and
+ * `testnet4` (call `switchNetwork`) are the only two outcomes the Stacks drivers can honour today.
+ * `testnet` is the word a human actually writes and resolves to `testnet4`, the preset Leather's
+ * own picker offers and the one this project's tests are proven against.
  */
 const NETWORK_WORDS: Readonly<Record<string, SupportedStacksNetwork>> = {
   mainnet: 'mainnet',
@@ -34,12 +42,6 @@ const NETWORK_WORDS: Readonly<Record<string, SupportedStacksNetwork>> = {
  * far worse, silently switching the wallet to testnet4 while the mined step polls devnet's RPC.
  */
 const UNSUPPORTED_NETWORK_WORDS: readonly StacksNetwork[] = ['testnet3', 'signet', 'devnet'];
-
-/**
- * The subset of `StacksNetwork` a `WalletDriver` can actually be placed on. Narrower than
- * `StacksNetwork` on purpose — see `NETWORK_WORDS`.
- */
-export type SupportedStacksNetwork = Extract<StacksNetwork, 'mainnet' | 'testnet4'>;
 
 /** What a chain/network phrase in a Gherkin sentence resolves to. */
 export interface ParsedNetworkPhrase {
@@ -73,8 +75,8 @@ export function parseNetworkPhrase(chain: string, network: string): ParsedNetwor
   if (UNSUPPORTED_NETWORK_WORDS.includes(networkWord as StacksNetwork)) {
     throw new Error(
       `[@wallets-e2e/core/bdd] The Stacks network "${network}" is real, but no wallet step can put ` +
-        `a wallet on it yet: the WalletDriver port only offers switchToTestnetNetwork(), which ` +
-        `reaches testnet4. Supported for now: ${Object.keys(NETWORK_WORDS).join(', ')}.`,
+        `a wallet on it yet: these steps only ever hand switchNetwork() mainnet or testnet4. ` +
+        `Supported for now: ${Object.keys(NETWORK_WORDS).join(', ')}.`,
     );
   }
 

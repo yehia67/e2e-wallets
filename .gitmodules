@@ -1,0 +1,3 @@
+[submodule "examples/metamask-spike/lib/openzeppelin-contracts"]
+	path = examples/metamask-spike/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts

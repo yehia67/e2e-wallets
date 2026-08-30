@@ -1,4 +1,9 @@
-import type { BrowserContext, WalletAccount, WalletDriver } from '@wallets-e2e/core';
+import type {
+  BrowserContext,
+  SupportedStacksNetwork,
+  WalletAccount,
+  WalletDriver,
+} from '@wallets-e2e/core';
 import { resolveExtensionId } from '@wallets-e2e/core';
 import { wallet } from '../fixtures/wallet.js';
 
@@ -19,7 +24,7 @@ import { wallet } from '../fixtures/wallet.js';
  *      checked independently via @stacks/wallet-sdk — surfaces the *mainnet*-form address, not
  *      the devnet/testnet form. This driver asserts against that mainnet form for that reason.
  */
-export const leatherDriver: WalletDriver = {
+export const leatherDriver: WalletDriver<SupportedStacksNetwork> = {
   async importWallet(context: BrowserContext, seedPhrase: string): Promise<WalletAccount> {
     // Leather doesn't reliably auto-open an onboarding tab the instant the context launches —
     // observed directly during inspection (present in some runs, absent in others depending on
@@ -97,7 +102,7 @@ export const leatherDriver: WalletDriver = {
     return { address: wallet.mainnetAddress };
   },
 
-  async switchToTestnetNetwork(context: BrowserContext): Promise<void> {
+  async switchNetwork(context: BrowserContext, network: SupportedStacksNetwork): Promise<void> {
     // Real discovery (Story 1.4): Leather defaults to mainnet regardless of what network the
     // dapp/RPC call names — a transfer request against an account Leather thinks is on mainnet
     // (0 balance there) crashes Leather's own fee-estimation step outright ("Error generating
@@ -107,7 +112,7 @@ export const leatherDriver: WalletDriver = {
     // "Testnet4" preset, `api.testnet.hiro.so`, is used instead.)
     const page = context.pages().find((p) => p.url().startsWith('chrome-extension://') && p.url().includes('index.html'));
     if (!page) {
-      throw new Error('[wallets/leather] switchToTestnetNetwork: no open Leather dashboard page found — call importWallet first.');
+      throw new Error('[wallets/leather] switchNetwork: no open Leather dashboard page found — call importWallet first.');
     }
 
     // The header's settings menu trigger has no stable testid/aria-label (icon-only button) — it
@@ -115,11 +120,18 @@ export const leatherDriver: WalletDriver = {
     // exists further down for "Collectibles").
     await page.locator('button[aria-haspopup="menu"]').first().click();
     await page.locator('[data-testid="settings-change-network"]').click();
-    await page.locator('[data-testid="testnet4"]').click();
+    // Leather's own picker uses the network name as the row's testid — verified against the real
+    // UI for `testnet4`, which is the only network this project's tests exercise.
+    await page.locator(`[data-testid="${network}"]`).click();
 
     // Real signal: the dashboard's balance display updates once Leather has actually queried the
     // selected network — never trust "the menu closed" as proof the switch took effect.
-    await page.getByText(/^testnet4$/i).waitFor({ state: 'visible', timeout: 10_000 });
+    await page.getByText(new RegExp(`^${network}$`, 'i')).waitFor({ state: 'visible', timeout: 10_000 });
+  },
+
+  /** @deprecated Use `switchNetwork(context, 'testnet4')`. */
+  async switchToTestnetNetwork(context: BrowserContext): Promise<void> {
+    await leatherDriver.switchNetwork?.(context, 'testnet4');
   },
 
   async connectToDapp(context: BrowserContext, trigger: () => Promise<void>): Promise<void> {

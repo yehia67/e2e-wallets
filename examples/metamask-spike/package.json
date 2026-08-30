@@ -1,0 +1,24 @@
+{
+  "name": "@wallets-e2e/example-metamask-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Proving test: real MetaMask extension on any EVM network — unlock, pick network, connect, send.",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "build:contracts": "forge build",
+    "deploy": "node ./scripts/deploy.mjs",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.47.0",
+    "@wallets-e2e/core": "workspace:*",
+    "@wallets-e2e/metamask": "workspace:*",
+    "viem": "^2.55.19"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

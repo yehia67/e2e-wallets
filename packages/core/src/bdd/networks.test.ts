@@ -72,7 +72,7 @@ describe('parseNetworkPhrase', () => {
         (error: unknown) => {
           assert.ok(error instanceof Error);
           assert.match(error.message, new RegExp(network));
-          assert.match(error.message, /not put a wallet on it yet|switchToTestnetNetwork/);
+          assert.match(error.message, /not put a wallet on it yet|switchNetwork/);
           // Must never read as an unrecognised word — it is a real network, just unwired.
           assert.doesNotMatch(error.message, /Unknown network/);
           return true;

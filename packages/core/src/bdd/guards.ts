@@ -37,7 +37,19 @@ export function requireTest<T>(test: T | undefined): T {
  * naming the exact call the consumer is missing — the failure otherwise surfaces as an
  * undefined-property error deep inside a step, which says nothing about what to fix.
  */
-export function requireDriver(driver: WalletDriver | undefined): WalletDriver {
+/**
+ * What these steps need a registered driver to be.
+ *
+ * The port's network verb is left at its `never` default on purpose. Only one step here uses it —
+ * the Stacks `Given I am connected to ...` — while every other step (popup approval, signature
+ * approval, mined confirmation) needs no network at all. Pinning this to
+ * `WalletDriver<SupportedStacksNetwork>` would reject a legitimate consumer:
+ * `examples/metamask-bdd` registers an EVM driver purely to reuse the approval steps and writes
+ * its own connect sentence, and an `EvmNetwork` is not a Stacks network word.
+ */
+export type WalletStepsDriver = WalletDriver<never>;
+
+export function requireDriver(driver: WalletStepsDriver | undefined): WalletStepsDriver {
   if (!driver) {
     throw new Error(
       `[@wallets-e2e/core/bdd] No wallet driver is registered, so this step cannot run. ` +
@@ -67,31 +79,52 @@ export function requireSeedPhrase(seedPhrase: string | undefined): string {
 }
 
 /**
- * `switchToTestnetNetwork` is optional on the `WalletDriver` port, and optional-chaining the call
- * would let a driver without one no-op straight past a `Given I am connected to Stacks testnet` —
- * leaving the wallet wherever it defaults to, which for Leather is **mainnet**. The scenario would
- * then go on to sign a real transaction with real value against a mainnet account. Refusing to
- * continue is the only safe reading of that sentence.
+ * `switchNetwork` is optional on the `WalletDriver` port, and optional-chaining the call would let
+ * a driver without one no-op straight past a `Given I am connected to Stacks testnet` — leaving
+ * the wallet wherever it defaults to, which for Leather is **mainnet**. The scenario would then go
+ * on to sign a real transaction with real value against a mainnet account. Refusing to continue is
+ * the only safe reading of that sentence.
  *
- * Returns the bound switch function for a non-mainnet network, or `undefined` when the sentence
- * asked for mainnet and no switch is wanted at all.
+ * Returns the parsed network already bound in, so the caller cannot forget to pass it, or
+ * `undefined` when the sentence asked for mainnet and no switch is wanted at all.
  */
 export function requireNetworkSwitch(
-  driver: WalletDriver,
+  driver: WalletStepsDriver,
   network: SupportedStacksNetwork,
 ): ((context: BrowserContext) => Promise<void>) | undefined {
   if (network === 'mainnet') return undefined;
 
-  if (typeof driver.switchToTestnetNetwork !== 'function') {
+  if (
+    typeof driver.switchNetwork !== 'function' &&
+    typeof driver.switchToTestnetNetwork !== 'function'
+  ) {
     throw new Error(
       `[@wallets-e2e/core/bdd] The step asked for "${network}", but this wallet driver does not ` +
-        `implement switchToTestnetNetwork(), so the wallet would silently stay on whatever network ` +
-        `it defaults to — mainnet, for every wallet this project has seen. Refusing to continue ` +
-        `rather than risk signing a real-value transaction. Implement switchToTestnetNetwork() on ` +
-        `the driver, or write the scenario as "connected to Stacks mainnet" if that is genuinely ` +
-        `what you meant.`,
+        `implement switchNetwork() (or the legacy switchToTestnetNetwork()), so the wallet would ` +
+        `silently stay on whatever network it ` +
+        `defaults to — mainnet, for every wallet this project has seen. Refusing to continue ` +
+        `rather than risk signing a real-value transaction. Implement switchNetwork() on the ` +
+        `driver, or write the scenario as "connected to Stacks mainnet" if that is genuinely what ` +
+        `you meant.`,
     );
   }
 
-  return driver.switchToTestnetNetwork.bind(driver);
+  if (typeof driver.switchNetwork !== 'function') {
+    return driver.switchToTestnetNetwork!.bind(driver);
+  }
+
+  // Bound, so a driver written with `this`-dependent internals still works, and the network the
+  // sentence actually named travels with the call rather than being re-derived by the caller.
+  //
+  // The cast re-widens the port's deliberately-`never` network parameter (see `WalletStepsDriver`)
+  // back to what this Stacks-only sentence actually means. It is not a hole: a driver registered
+  // here whose `switchNetwork` cannot accept a Stacks network word has no business running
+  // `Given I am connected to Stacks ...` at all, and rejects the value itself — loudly, in its own
+  // error — rather than silently leaving the wallet on mainnet, which is the outcome this guard
+  // exists to prevent.
+  const switchNetwork = driver.switchNetwork.bind(driver) as (
+    context: BrowserContext,
+    network: SupportedStacksNetwork,
+  ) => Promise<void>;
+  return (context: BrowserContext) => switchNetwork(context, network);
 }

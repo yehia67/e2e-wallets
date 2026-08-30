@@ -62,7 +62,7 @@ export const test = base.extend<Fixtures>({
   },
 
   connectedAppOnTestnet: async ({ unlockedContext }, use) => {
-    await leatherDriver.switchToTestnetNetwork?.(unlockedContext);
+    await leatherDriver.switchNetwork?.(unlockedContext, wallet.network);
 
     const appPage = await unlockedContext.newPage();
     await appPage.goto('/');

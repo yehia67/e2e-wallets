@@ -14,15 +14,6 @@ import { test as base } from 'playwright-bdd';
 export const EXTENSION_PATH = join(import.meta.dirname, '../../../wallets/leather/dist');
 
 /**
- * Set `WALLETS_E2E_REQUIRE_EXTENSION=1` to turn "the extension isn't built" from a skip into a
- * failure. Without it, a run on a machine that never executed `pnpm build:leather` reports the
- * whole suite green with every scenario skipped — and nothing in `pnpm build && pnpm test` builds
- * the extension, so that is the default state of a fresh clone and of CI. `examples/spike` makes
- * the same distinction between a soft skip and a loud failure.
- */
-const REQUIRE_EXTENSION = process.env.WALLETS_E2E_REQUIRE_EXTENSION === '1';
-
-/**
  * The two built-in fixtures are *overridden*, not added alongside: `@wallets-e2e/core/bdd`'s steps
  * read the stock `context` and `page`, which keeps them wallet- and project-agnostic. Everything
  * extension-specific — where the unpacked build lives, the persistent profile, the video dir —
@@ -31,14 +22,9 @@ const REQUIRE_EXTENSION = process.env.WALLETS_E2E_REQUIRE_EXTENSION === '1';
  */
 export const test = base.extend({
   context: async ({}, use, testInfo) => {
-    const built = existsSync(join(EXTENSION_PATH, 'manifest.json'));
-    if (!built && REQUIRE_EXTENSION) {
-      throw new Error(
-        `Leather is not built at ${EXTENSION_PATH}, and WALLETS_E2E_REQUIRE_EXTENSION=1 says these ` +
-          `scenarios must actually run. Build it first: pnpm build:leather`,
-      );
+    if (!existsSync(join(EXTENSION_PATH, 'manifest.json'))) {
+      throw new Error(`Leather is not built at ${EXTENSION_PATH}. Build it first: pnpm build:leather`);
     }
-    testInfo.skip(!built, 'Leather is not built yet — run: pnpm build:leather');
 
     // A browser extension only loads via a persistent context, and `packages/core` owns the one
     // call that creates it (AD-1) — never `chromium.launch` here.

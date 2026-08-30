@@ -1,6 +1,11 @@
-import { CHAIN, STACKS_NETWORK_RPC_URLS, type StacksNetwork } from '@wallets-e2e/core';
+import { STACKS_NETWORK_RPC_URLS, type Chain, type SupportedStacksNetwork } from '@wallets-e2e/core';
 
-const NETWORK: StacksNetwork = 'testnet4';
+// Named explicitly rather than read from a single `CHAIN` constant: this project now drives an
+// EVM wallet too, so "the chain" is a per-fixture fact, not a global one.
+const CHAIN: Chain = 'stacks';
+// Typed as `SupportedStacksNetwork`, not `StacksNetwork`, so this value can be handed straight to
+// `leatherDriver.switchNetwork` — the driver only reaches the networks Leather's picker offers.
+const NETWORK: SupportedStacksNetwork = 'testnet4';
 
 // Safe, checked-in default -- has never held, and will never hold, anything of real value. Exists
 // purely so `pnpm test` works out of the box with no setup. Never a real-value seed.

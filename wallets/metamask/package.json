@@ -1,0 +1,61 @@
+{
+  "name": "@wallets-e2e/metamask",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "WalletDriver adapter for the pinned official MetaMask 13.13.1 production extension, for any EVM network.",
+  "keywords": [
+    "playwright",
+    "ethereum",
+    "metamask",
+    "wallet",
+    "e2e",
+    "blockchain",
+    "web3",
+    "browser-extension",
+    "evm"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yehia67/e2e-wallets.git",
+    "directory": "wallets/metamask"
+  },
+  "bugs": {
+    "url": "https://github.com/yehia67/e2e-wallets/issues"
+  },
+  "homepage": "https://github.com/yehia67/e2e-wallets#readme",
+  "main": "./lib/src/index.js",
+  "types": "./lib/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/src/index.d.ts",
+      "default": "./lib/src/index.js"
+    },
+    "./fixtures/wallet.js": {
+      "types": "./lib/fixtures/wallet.d.ts",
+      "default": "./lib/fixtures/wallet.js"
+    }
+  },
+  "files": [
+    "lib",
+    "src",
+    "fixtures"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build:extension": "bash ./scripts/build-extension.sh"
+  },
+  "dependencies": {
+    "@wallets-e2e/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@playwright/test": "^1.47.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@types/chrome": "^0.2.7",
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3"
+  }
+}

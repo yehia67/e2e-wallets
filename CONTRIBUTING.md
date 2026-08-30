@@ -10,15 +10,17 @@ Thanks for considering it — this project is early and could genuinely use help
 git clone https://github.com/yehia67/e2e-wallets.git
 cd e2e-wallets
 pnpm install
-pnpm build:leather   # builds the real Leather extension from source (idempotent). REQUIRED --
-                     # nothing in `pnpm build` does it, and without it the browser suites skip
-                     # themselves rather than fail.
+pnpm build:leather   # builds the real Leather extension from source (idempotent). REQUIRED for
+                     # Leather browser suites — nothing in `pnpm build` does it, and without it
+                     # those suites skip themselves rather than fail.
+pnpm build:metamask  # downloads/builds the real MetaMask test extension (idempotent). REQUIRED for
+                     # `examples/metamask-spike` — same skip-if-not-built pattern as Leather.
 pnpm build
 pnpm test            # `node --test` unit tests, then real Chromium windows driving the real
                      # extension -- expect browser popups, and a real testnet transaction
 ```
 
-`pnpm test` spends real testnet STX from the fixture wallet and waits on real blocks, so a full run is minutes, not seconds. To assert that the browser suites actually ran rather than skipped (what you want in CI), set `WALLETS_E2E_REQUIRE_EXTENSION=1` — a missing extension build then fails instead of skipping.
+`pnpm test` spends real testnet funds from the fixture wallet and waits on real blocks, so a full run is minutes, not seconds. Nothing is skipped: a missing extension build or missing deployed contracts fails the run with the command to fix it.
 
 If those don't get you to a passing test suite on a clean checkout, that's a bug in this project (or its docs) — please open an issue.
 
@@ -29,13 +31,17 @@ Every wallet extension this project supports is driven the same way, through one
 - **`packages/core`** owns the parts that don't change per wallet: launching the browser with an extension loaded (`launchContext`), figuring out the extension's runtime ID (`resolveExtensionId`), and the `WalletDriver` interface every wallet adapter implements.
 - **`wallets/<name>`** is one package per wallet. Each implements `WalletDriver`:
   ```ts
-  interface WalletDriver {
+  interface WalletDriver<TNetwork = never> {
     importWallet(context: BrowserContext, seedPhrase: string): Promise<WalletAccount>;
+    // The network is a parameter, not part of the verb — `TNetwork` is whatever value that chain
+    // names a network with (a Stacks network word for Leather, an `EvmNetwork` for MetaMask).
+    switchNetwork?(context: BrowserContext, network: TNetwork): Promise<void>;
     connectToDapp(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
     confirmTransaction(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
+    confirmSignature?(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
   }
   ```
-  `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural.
+  `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural. `wallets/metamask` is the second adapter — the pinned official MetaMask 13.13.1 production extension, driving **any** EVM network: `switchNetwork(context, network)` keeps built-in providers intact and validates custom networks or explicit RPC overrides before adding them.
 - **`examples/spike`** holds the actual Playwright tests that exercise a driver end to end. **`examples/react-connect`** is a real dapp with a real `@stacks/connect` integration, and **`examples/bdd`** drives that same dapp from Gherkin `.feature` files through the step library in `packages/core/src/bdd/`.
 
 ## Adding a new wallet adapter
@@ -45,6 +51,22 @@ Every wallet extension this project supports is driven the same way, through one
 3. Implement `importWallet` first, and get it passing against a real test before touching `connectToDapp`/`confirmTransaction`. **Inspect the real onboarding flow before automating it — don't guess at selectors, screen order, or validation rules (e.g., minimum password strength, exact word count).** A small standalone Node script that launches the extension headed and dumps page text/button labels at each step is the fastest way to do this; see the shape of the driver's own comments for the kind of thing worth writing down once you find it (e.g. "defaults to a 24-word seed screen," "Continue stays disabled below a password-strength threshold").
 4. Write the equivalent of `examples/spike`'s test for the new wallet, covering at minimum: happy path, a missing-build error case, and a malformed-input error case that must fail loudly rather than silently reporting success.
 5. Verify the address/account your driver returns against an independent derivation (e.g. via `@stacks/wallet-sdk`) rather than trusting that "the UI flow completed" means it actually worked.
+
+### MetaMask (EVM) setup
+
+MetaMask's fixture wallet has **no checked-in seed phrase** — you must generate one locally:
+
+```bash
+node wallets/metamask/scripts/generate-fixture-wallet.mjs   # prints a Sepolia funding address
+# Fund that address on Sepolia (e.g. https://sepoliafaucet.com/) before send/deposit tests.
+# Do NOT `source wallets/metamask/.env.local` — seed phrases contain spaces; tests load it via fixtures/wallet.ts.
+pnpm build:metamask
+cd examples/metamask-spike && forge build && cd ../../..      # ERC20 spike contracts
+node examples/metamask-spike/scripts/deploy.mjs               # deploy token + vault, mint WET
+pnpm --filter @wallets-e2e/example-metamask-spike test
+```
+
+The script writes `wallets/metamask/.env.local` (gitignored). Never commit seed phrases or that file.
 
 ## A few hard-won lessons worth knowing before you start
 

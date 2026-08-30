@@ -4,6 +4,9 @@ import { describe, it } from 'node:test';
 // `node --test` straight from source, and is excluded from the package build.
 import { requireDriver, requireNetworkSwitch, requireSeedPhrase, requireTest } from './guards.ts';
 import type { WalletDriver } from '../index.js';
+import type { SupportedStacksNetwork } from './networks.ts';
+
+type StacksDriver = WalletDriver<SupportedStacksNetwork>;
 
 // Covers the "Driver not registered" row of the spec's I/O & Edge-Case Matrix. The guards live
 // apart from `./index.ts` precisely so this row is covered by a real, registered test rather than
@@ -94,19 +97,31 @@ describe('requireTest', () => {
 describe('requireNetworkSwitch', () => {
   const driverWithSwitch = {
     importWallet: async () => ({ address: 'ST0' }),
-    switchToTestnetNetwork: async () => {},
+    switchNetwork: async () => {},
     connectToDapp: async () => {},
     confirmTransaction: async () => {},
-  } as unknown as WalletDriver;
+  } as unknown as StacksDriver;
 
   const driverWithoutSwitch = {
     importWallet: async () => ({ address: 'ST0' }),
     connectToDapp: async () => {},
     confirmTransaction: async () => {},
-  } as unknown as WalletDriver;
+  } as unknown as StacksDriver;
+
+  const legacyDriver = {
+    importWallet: async () => ({ address: 'ST0' }),
+    switchToTestnetNetwork: async () => {},
+    connectToDapp: async () => {},
+    confirmTransaction: async () => {},
+  } as unknown as StacksDriver;
 
   it('returns the driver switch when a non-mainnet network was asked for', () => {
     assert.equal(typeof requireNetworkSwitch(driverWithSwitch, 'testnet4'), 'function');
+  });
+
+  it('falls back to the deprecated testnet switch for compatible drivers', async () => {
+    assert.equal(typeof requireNetworkSwitch(legacyDriver, 'testnet4'), 'function');
+    await requireNetworkSwitch(legacyDriver, 'testnet4')?.({} as never);
   });
 
   it('returns nothing for mainnet, where no switch is wanted at all', () => {
@@ -119,7 +134,7 @@ describe('requireNetworkSwitch', () => {
       () => requireNetworkSwitch(driverWithoutSwitch, 'testnet4'),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.match(error.message, /switchToTestnetNetwork/);
+        assert.match(error.message, /switchNetwork/);
         assert.match(error.message, /mainnet/);
         assert.match(error.message, /testnet4/);
         return true;
@@ -131,12 +146,26 @@ describe('requireNetworkSwitch', () => {
     // Bound, so a driver written with `this`-dependent internals still works.
     let receivedThis: unknown;
     const driver = {
-      async switchToTestnetNetwork(this: unknown) {
+      async switchNetwork(this: unknown) {
         receivedThis = this;
       },
-    } as unknown as WalletDriver;
+    } as unknown as StacksDriver;
     const context = {} as never;
     await requireNetworkSwitch(driver, 'testnet4')?.(context);
     assert.equal(receivedThis, driver);
+  });
+
+  it('passes the parsed network through to the driver, not just the context', async () => {
+    // The whole point of `switchNetwork(context, network)` over the old no-argument verb: a
+    // driver that is never told which network cannot honour the sentence that named one.
+    const received: unknown[] = [];
+    const driver = {
+      async switchNetwork(context: unknown, network: unknown) {
+        received.push(context, network);
+      },
+    } as unknown as StacksDriver;
+    const context = { marker: 'ctx' } as never;
+    await requireNetworkSwitch(driver, 'testnet4')?.(context);
+    assert.deepEqual(received, [context, 'testnet4']);
   });
 });
