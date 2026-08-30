@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, it } from 'node:test';
-// Explicit `.ts` extension for the same reason as `bdd/networks.test.ts`: this file is run by
-// `node --test` straight from source, and is excluded from the package build.
+// Explicit `.ts` extension: run by `node --test` straight from source, excluded from the build.
 import {
-  CHAIN,
   EVM_NETWORKS,
-  SEPOLIA_RPC_URLS,
   chainIdToCaip,
   chainIdToHex,
   evmRpcCandidates,
@@ -14,21 +11,7 @@ import {
   waitForEthTransactionMined,
   type EvmRpcRequester,
   type EvmNetwork,
-} from './index.ts';
-
-describe('compatibility exports', () => {
-  it('keeps the historical Stacks chain constant', () => {
-    assert.equal(CHAIN, 'stacks');
-  });
-
-  it('keeps Sepolia RPC URLs as an alias of the generic preset', () => {
-    assert.equal(SEPOLIA_RPC_URLS, EVM_NETWORKS.sepolia.rpcUrls);
-  });
-});
-
-// The rows of the spec's I/O & Edge-Case Matrix that need no browser. Everything else in this
-// feature (pick-or-add, the home picker, the RPC edit form) is real-extension behaviour and is
-// proved by `examples/metamask-spike`, not here.
+} from './evm.ts';
 
 describe('chainIdToHex', () => {
   it('renders a chain id in the 0x form eth_chainId and older wallet testids use', () => {
@@ -242,9 +225,8 @@ describe('probeEvmRpc', () => {
     assert.equal(await probeEvmRpc(url, CHAIN_ID), false);
   });
 
-  // The "this RPC request credential" failure shape: an endpoint that serves the cheap reads for
-  // free and gates the calls a wallet actually needs to show a balance and estimate a fee. Probing
-  // only eth_chainId would wave every one of these through.
+  // Endpoints that serve the cheap reads free and gate what a wallet needs — probing only
+  // eth_chainId would wave every one of these through.
   for (const gated of ['eth_getBalance', 'eth_estimateGas'] as const) {
     it(`rejects an endpoint that serves the cheap reads but paywalls ${gated}`, async () => {
       const url = await serve((method) => {
@@ -295,7 +277,6 @@ describe('probeEvmRpc', () => {
   });
 
   it('returns false instead of throwing on an unreachable or malformed URL', async () => {
-    // The caller's whole job is walking a candidate list — a probe that threw would abort the walk.
     assert.equal(await probeEvmRpc('not a url at all', CHAIN_ID), false);
     assert.equal(await probeEvmRpc('http://127.0.0.1:1/', CHAIN_ID, 1_000), false);
   });

@@ -1,14 +1,9 @@
 import type { StacksTxStatus } from '../index.js';
 
 /**
- * `waitForTransactionMined` *returns* an abort status rather than throwing on one — a transaction
- * that was mined and then rejected is a perfectly successful poll. For a `Then the transaction is
- * mined` step it is a failure, and this is what turns it into one.
- *
- * Kept as its own pure function, apart from `./index.ts` (the only module that imports
- * `playwright-bdd`), because the real testnet run only ever produces `success`: inlined in the step
- * this branch is unreachable from any test, and deleting it would leave the suite green. Here
- * `node --test` covers both abort statuses directly.
+ * `waitForTransactionMined` returns an abort status rather than throwing on one — a mined-then-
+ * rejected transaction is a successful poll but a failed step. Its own pure function so
+ * `node --test` can cover the abort branches a real testnet run never produces.
  */
 export function assertMinedStatus(txid: string, status: StacksTxStatus): void {
   if (status === 'success') return;

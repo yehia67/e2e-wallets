@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-// Explicit `.ts` extension for the same reason as `networks.test.ts`: this file is run by
-// `node --test` straight from source, and is excluded from the package build.
+// Explicit `.ts` extension: run by `node --test` straight from source, excluded from the build.
 import { assertMinedStatus } from './mined.ts';
 
 const TXID = '0x' + 'a'.repeat(64);
 
-// Covers the "Mined assertion" row of the spec's I/O & Edge-Case Matrix: `Then the transaction is
-// mined` must throw on `abort_by_*`. A real testnet run only ever returns `success`, so without
-// these cases the branch is unreachable and deleting it would leave the whole suite green.
+// A real testnet run only ever returns `success`, so these cases are the only cover the
+// `abort_by_*` branch gets.
 describe('assertMinedStatus', () => {
   it('passes a mined, successful transaction through silently', () => {
     assert.doesNotThrow(() => assertMinedStatus(TXID, 'success'));
@@ -53,8 +51,6 @@ describe('assertMinedStatus', () => {
   });
 
   it('treats any other non-success status as a failure too', () => {
-    // `waitForTransactionMined` never returns these, but a caller passing one straight through
-    // must not be silently accepted.
     assert.throws(() => assertMinedStatus(TXID, 'pending'), /did not succeed/);
     assert.throws(() => assertMinedStatus(TXID, 'not_found'), /did not succeed/);
   });

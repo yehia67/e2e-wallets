@@ -1,46 +1,25 @@
 import type { Chain, StacksNetwork, SupportedStacksNetwork } from '../index.js';
 
-// Re-exported so `@wallets-e2e/core/bdd` consumers keep importing it from where they always have;
-// it is defined next to the `WalletDriver` port in `../index.ts` so wallet packages can name it
-// without depending on the optional `playwright-bdd` peer this module pulls in.
+// Re-exported so `@wallets-e2e/core/bdd` consumers keep importing it from where they always have.
 export type { SupportedStacksNetwork };
 
 /**
- * The chain words a `.feature` sentence may use, mapped onto core's `Chain`. This is a *sentence
- * vocabulary*, deliberately separate from the `Chain` type itself: what a product owner types in
- * Gherkin ("Stacks") and what the code calls the chain ("stacks") are allowed to drift apart.
- * Typed against `Chain` so a value that isn't a real chain fails to compile.
- *
- * Deliberately Stacks-only even though `Chain` now includes `'evm'`: these steps resolve Stacks
- * network words and poll a Stacks API, so accepting "Ethereum" here would produce a sentence that
- * parses and then does the wrong thing. EVM scenarios drive their driver from their own steps
- * (see `examples/metamask-bdd`).
+ * The chain words a `.feature` sentence may use. Stacks-only even though `Chain` includes `'evm'`:
+ * these steps resolve Stacks network words and poll a Stacks API, so accepting "Ethereum" would
+ * parse and then do the wrong thing.
  */
 const CHAIN_WORDS: Readonly<Record<string, Chain>> = {
   stacks: 'stacks',
 };
 
-/**
- * The networks a `WalletDriver` can actually be put on today, and the sentence words that reach
- * them.
- *
- * This list is deliberately shorter than `StacksNetwork`. `mainnet` (leave the wallet alone) and
- * `testnet4` (call `switchNetwork`) are the only two outcomes the Stacks drivers can honour today.
- * `testnet` is the word a human actually writes and resolves to `testnet4`, the preset Leather's
- * own picker offers and the one this project's tests are proven against.
- */
+/** Shorter than `StacksNetwork` on purpose: the two outcomes Stacks drivers can honour today. */
 const NETWORK_WORDS: Readonly<Record<string, SupportedStacksNetwork>> = {
   mainnet: 'mainnet',
   testnet: 'testnet4',
   testnet4: 'testnet4',
 };
 
-/**
- * Real Stacks networks that this project recognises but cannot yet put a wallet on. They are
- * listed separately, and rejected with their own message, so `Given I am connected to Stacks
- * devnet` says "not supported yet" instead of either "unknown network" (wrong — devnet is real) or,
- * far worse, silently switching the wallet to testnet4 while the mined step polls devnet's RPC.
- */
+/** Real networks no wallet step can reach yet. Listed apart so they get "not supported yet". */
 const UNSUPPORTED_NETWORK_WORDS: readonly StacksNetwork[] = ['testnet3', 'signet', 'devnet'];
 
 /** What a chain/network phrase in a Gherkin sentence resolves to. */
@@ -50,14 +29,8 @@ export interface ParsedNetworkPhrase {
 }
 
 /**
- * Turns the two words of `Given I am connected to <chain> <network>` into the chain/network pair
- * the wallet steps actually operate on — `('Stacks', 'testnet')` -> `{ chain: 'stacks', network:
- * 'testnet4' }`.
- *
- * Case-insensitive and whitespace-tolerant, because the input is prose written by a human, not an
- * identifier. Unknown or unsupported words throw here — before anything is launched — naming the
- * offending word and listing what is accepted, so a bad `.feature` line fails in milliseconds with
- * a readable message rather than somewhere deep inside a browser launch.
+ * `('Stacks', 'testnet')` -> `{ chain: 'stacks', network: 'testnet4' }`. Case- and
+ * whitespace-tolerant, since the input is human prose; unknown words throw before anything launches.
  */
 export function parseNetworkPhrase(chain: string, network: string): ParsedNetworkPhrase {
   const chainWord = chain.trim().toLowerCase();
