@@ -11,49 +11,76 @@ One uninterrupted session: import → network → connect → send ETH → appro
 
 ## Install
 
+Compatibility status verified 2026-08-30: published MetaMask `0.1.0` imports EVM APIs that published
+core `0.1.3` does not export. There is currently no working npm version pair. Do not clone or link
+repository source as a substitute. After compatible versions are published, install the verified
+pair in your dapp:
+
 ```bash
-npm install --save-dev @wallets-e2e/core @wallets-e2e/metamask @playwright/test
-pnpm build:metamask
+WALLETS_CORE_VERSION=replace-with-verified-version
+WALLETS_METAMASK_VERSION=replace-with-verified-version
+npm install --save-dev \
+  "@wallets-e2e/core@${WALLETS_CORE_VERSION}" \
+  "@wallets-e2e/metamask@${WALLETS_METAMASK_VERSION}" \
+  @playwright/test
+npx playwright install chromium
 ```
 
-`@playwright/test` is a peer dependency. `build:metamask` downloads and verifies the pinned extension.
+The replacement values are deliberately invalid. Confirm the installed core exports `EVM_NETWORKS`,
+`createExtensionTest`, `createInjectedEvmRpc`, and `waitForEthTransactionMined` before proceeding.
+
+The package supplies the driver; the browser extension is a separate artifact. Download the pinned
+official production build into your dapp:
+
+```bash
+mkdir -p .wallet-extensions/metamask-13.13.1
+curl --fail --location \
+  https://github.com/MetaMask/metamask-extension/releases/download/v13.13.1/metamask-chrome-13.13.1.zip \
+  --output .wallet-extensions/metamask-chrome-13.13.1.zip
+unzip -q -o .wallet-extensions/metamask-chrome-13.13.1.zip \
+  -d .wallet-extensions/metamask-13.13.1
+node -e "const m=require('./.wallet-extensions/metamask-13.13.1/manifest.json'); if(m.version!=='13.13.1') throw new Error('Unexpected MetaMask '+m.version)"
+```
 
 ## Fixture wallet
 
-No seed phrase is checked in. Generate one, then fund the address it prints:
+Provide a dedicated test wallet through the Playwright process environment:
 
-```bash
-node wallets/metamask/scripts/generate-fixture-wallet.mjs
+```text
+WALLETS_E2E_SEED_PHRASE=<local test-wallet phrase>
+WALLETS_E2E_ETH_ADDRESS=<matching 0x address>
+WALLETS_E2E_PASSWORD=<strong local extension password>
 ```
 
-It writes the gitignored `wallets/metamask/.env.local`, which `fixtures/wallet.ts` loads automatically. Don't `source` it in bash — seed phrases contain spaces. Re-running preserves an existing wallet; `--force` replaces it.
+Inject them before Node imports the driver. Never put a funded seed phrase in a spec, report, video,
+or committed fixture.
 
 ## Usage
 
 ```ts
-import { test, expect } from '@playwright/test';
-import { EVM_NETWORKS, launchContext } from '@wallets-e2e/core';
+import { resolve } from 'node:path';
+import { EVM_NETWORKS, createExtensionTest } from '@wallets-e2e/core';
 import { metamaskDriver } from '@wallets-e2e/metamask';
-import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
+import { expect } from '@playwright/test';
 
-test('connects on the selected network', async () => {
-  const context = await launchContext({
-    extensionPath: 'wallets/metamask/dist',
-    userDataDir: '.tmp/metamask-profile',
-    recordVideoDir: 'test-results/videos',
-  });
-  const page = await context.newPage();
-  await page.goto('http://127.0.0.1:3456');
+const test = createExtensionTest({
+  extensionPath: resolve('.wallet-extensions/metamask-13.13.1'),
+  extensionName: 'MetaMask 13.13.1',
+  onMissingExtension: 'throw',
+});
 
-  await metamaskDriver.importWallet(context, wallet.seedPhrase);
+test('connects on the selected network', async ({ extensionContext: context, page }) => {
+  await page.goto('http://127.0.0.1:3000');
+
+  const expectedAddress = process.env.WALLETS_E2E_ETH_ADDRESS ?? '';
+  await metamaskDriver.importWallet(context, process.env.WALLETS_E2E_SEED_PHRASE ?? '');
   await metamaskDriver.switchNetwork?.(context, EVM_NETWORKS.sepolia);
 
   await metamaskDriver.connectToDapp(context, async () => {
     await page.getByTestId('connect-wallet').click();
   });
 
-  await expect(page.getByTestId('connected-address')).toContainText(wallet.address);
-  await context.close();
+  await expect(page.getByTestId('connected-address')).toContainText(expectedAddress);
 });
 ```
 
@@ -68,6 +95,16 @@ Each driver call takes the dapp interaction as a trigger, then handles the popup
 | `approveTokenPermission(context, trigger, options?)` | an ERC20 allowance, optional `spendLimit` |
 | `confirmSignature(context, trigger)` | EIP-712 / EIP-2612 permit |
 
+`approveTokenPermission` is specialized only because MetaMask renders ERC20 `approve` through a
+different spending-cap screen. It is not the package's general contract API. Any standard contract
+write that the dapp submits through MetaMask — mint, swap, stake, claim, vote, deploy, deposit,
+withdraw, or another ABI-encoded transaction — is approved with `confirmTransaction`. The dapp,
+viem, ethers, or wagmi constructs the request; the driver handles MetaMask's confirmation UI.
+
+Read-only contract calls do not need wallet approval. Run them through the dapp or an EVM client
+using `createInjectedEvmRpc(page)` to share MetaMask's active provider and network. After every write,
+wait for `waitForEthTransactionMined` and assert the intended contract-state change.
+
 ## Networks
 
 The network is an argument, not the driver's identity. Built-in chains use MetaMask's bundled provider; custom chains and explicit overrides are probed first — chain id must match and `eth_blockNumber`, `eth_gasPrice`, `eth_getBalance`, `eth_estimateGas` must all answer.
@@ -76,9 +113,9 @@ Override one chain with `WALLETS_E2E_RPC_URL_<chainId>`, or all with `WALLETS_E2
 
 ## More
 
-- [examples/metamask-spike](../../examples/metamask-spike) — Playwright specs, contracts, deploy script
-- [examples/metamask-bdd](../../examples/metamask-bdd) — the same flows as Gherkin `.feature` files
-- [CONTRIBUTING.md](../../CONTRIBUTING.md) — setup and demo GIF regeneration
+- [Package-consumer quick start](../../tutorials/quick-start.md)
+- [HTML reports, videos, screenshots, and traces](../../tutorials/reports-and-artifacts.md)
+- [Gherkin package setup](../../tutorials/feature-files.md)
 
 ## License
 
