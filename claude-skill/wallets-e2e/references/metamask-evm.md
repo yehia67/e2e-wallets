@@ -90,20 +90,28 @@ expected state change is not sufficient acceptance evidence.
 import { expect } from '@playwright/test';
 import { EVM_NETWORKS, chainIdToHex, createInjectedEvmRpc } from '@wallets-e2e/core';
 import { metamaskDriver } from '@wallets-e2e/metamask';
-import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
 import { test } from './fixtures.js';
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+const seedPhrase = required('WALLETS_E2E_SEED_PHRASE');
+const expectedAddress = required('WALLETS_E2E_ETH_ADDRESS');
 
 test('connects MetaMask on Sepolia', async ({ extensionContext: context, page }) => {
   await page.goto('/');
-  const account = await metamaskDriver.importWallet(context, wallet.seedPhrase);
-  expect(account.address.toLowerCase()).toBe(wallet.address.toLowerCase());
+  const account = await metamaskDriver.importWallet(context, seedPhrase);
+  expect(account.address.toLowerCase()).toBe(expectedAddress.toLowerCase());
 
   await metamaskDriver.switchNetwork?.(context, EVM_NETWORKS.sepolia);
   await metamaskDriver.connectToDapp(context, async () => {
     await page.getByTestId('connect-wallet').click();
   });
 
-  await expect(page.getByTestId('connected-address')).toContainText(wallet.address, {
+  await expect(page.getByTestId('connected-address')).toContainText(expectedAddress, {
     ignoreCase: true,
   });
 

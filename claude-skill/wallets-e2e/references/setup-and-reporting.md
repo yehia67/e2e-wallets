@@ -38,6 +38,22 @@ Therefore:
   `npm view @wallets-e2e/metamask version dependencies`, then verify the required exports. Do not
   repeat this warning after compatible releases exist; replace it with the verified version pair.
 
+### Never import the packages' own wallet fixtures
+
+`@wallets-e2e/leather/fixtures/wallet.js` and `@wallets-e2e/metamask/fixtures/wallet.js` are
+published, so they resolve — but they are the toolkit's own contributor fixtures, not a consumer
+API. Read the `WALLETS_E2E_*` variables in your own project instead.
+
+- The Leather fixture falls back to a seed phrase baked into the published package. Every project
+  importing it shares one publicly known wallet.
+- The MetaMask fixture throws at import time unless `WALLETS_E2E_SEED_PHRASE`,
+  `WALLETS_E2E_ETH_ADDRESS` and `WALLETS_E2E_PASSWORD` are all set, and its error text names a
+  repository script that the package does not ship.
+- Both drivers' `importWallet` verifies the unlocked account against an expected address, so your
+  own seed needs its matching address too: `WALLETS_E2E_ETH_ADDRESS` for MetaMask,
+  `WALLETS_E2E_MAINNET_ADDRESS` and `WALLETS_E2E_TESTNET_ADDRESS` for Leather. Supplying the seed
+  alone surfaces as an address mismatch rather than a missing-configuration error.
+
 ### Published package commands
 
 These URLs/packages are real, but version compatibility must be checked as described above:
@@ -74,10 +90,12 @@ to flush videos, attaches them to the current test, and removes the temporary pr
 
 ```ts
 // tests/fixtures.ts
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import { createExtensionTest } from '@wallets-e2e/core';
 
-const EXTENSION_PATH = join(import.meta.dirname, '../wallet-extension/dist');
+const EXTENSION_PATH = resolve(
+  process.env.METAMASK_EXTENSION_PATH ?? '.wallet-extensions/metamask/dist',
+);
 
 export const test = createExtensionTest({
   extensionPath: EXTENSION_PATH,

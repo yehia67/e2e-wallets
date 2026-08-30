@@ -19,13 +19,21 @@ import {
   TESTNET_RPC_URL,
 } from '@wallets-e2e/core';
 import { leatherDriver } from '@wallets-e2e/leather';
-import { wallet } from '@wallets-e2e/leather/fixtures/wallet.js';
 import { test } from './fixtures.js';
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+const seedPhrase = required('WALLETS_E2E_SEED_PHRASE');
+const expectedMainnetAddress = required('WALLETS_E2E_MAINNET_ADDRESS');
 
 test('connects and submits a Stacks transaction', async ({ extensionContext: context, page }) => {
   await page.goto('/');
-  const account = await leatherDriver.importWallet(context, wallet.seedPhrase);
-  expect(account.address).toBe(wallet.mainnetAddress);
+  const account = await leatherDriver.importWallet(context, seedPhrase);
+  expect(account.address).toBe(expectedMainnetAddress);
 
   await leatherDriver.switchToTestnetNetwork?.(context);
   await leatherDriver.connectToDapp(context, async () => {

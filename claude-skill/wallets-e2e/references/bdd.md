@@ -28,13 +28,18 @@ export default withWalletReporting(defineConfig({ testDir, workers: 1 }));
 import { createExtensionTest } from '@wallets-e2e/core';
 import { createWalletSteps } from '@wallets-e2e/core/bdd';
 import { leatherDriver } from '@wallets-e2e/leather';
-import { wallet } from '@wallets-e2e/leather/fixtures/wallet.js';
 import { resolve } from 'node:path';
 import { test as bddTest } from 'playwright-bdd';
 
 const extensionPath = resolve(
   process.env.LEATHER_EXTENSION_PATH ?? '.wallet-extensions/leather/dist',
 );
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
 
 export const test = createExtensionTest({
   base: bddTest,
@@ -45,11 +50,14 @@ export const test = createExtensionTest({
 export const { Given, When, Then } = createWalletSteps({
   test,
   driver: leatherDriver,
-  seedPhrase: wallet.seedPhrase,
+  seedPhrase: required('WALLETS_E2E_SEED_PHRASE'),
   walletName: 'Leather',
   connectTestId: 'connect-wallet',
 });
 ```
+
+Own your test wallet rather than importing the package's fixture — see
+[setup-and-reporting.md](setup-and-reporting.md#never-import-the-packages-own-wallet-fixtures).
 
 The `base` must be `playwright-bdd`'s `test`. Include the fixture file in the `steps` glob so generated
 specs import the extension-aware test. `createExtensionTest` overrides the stock `context` and `page`
