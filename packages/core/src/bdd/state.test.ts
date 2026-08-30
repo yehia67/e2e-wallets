@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-// Explicit `.ts` extension for the same reason as `networks.test.ts`: this file is run by
-// `node --test` straight from source, and is excluded from the package build.
+// Explicit `.ts` extension: run by `node --test` straight from source, excluded from the build.
 import {
   queueWalletTrigger,
   recordTransactionId,
@@ -13,9 +12,7 @@ import {
 } from './state.ts';
 import type { BrowserContext } from '../index.js';
 
-// The state is keyed by a `BrowserContext`, but only ever as a WeakMap key — it is never called
-// into. A bare object stands in for one, which is what lets these rules be tested at all without a
-// browser.
+// The context is only ever a WeakMap key, never called into, so a bare object stands in for one.
 function fakeContext(): BrowserContext {
   return {} as unknown as BrowserContext;
 }
@@ -45,7 +42,6 @@ describe('queueWalletTrigger / takeWalletTrigger', () => {
         assert.ok(error instanceof Error);
         assert.match(error.message, /no pending wallet action/);
         assert.match(error.message, /queueWalletTrigger/);
-        // The message has to explain the trigger() rule, not just report the symptom.
         assert.match(error.message, /trigger\(\)/);
         return true;
       },
@@ -57,7 +53,6 @@ describe('queueWalletTrigger / takeWalletTrigger', () => {
     const first = async () => {};
     queueWalletTrigger(context, first);
     assert.throws(() => queueWalletTrigger(context, async () => {}), /already queued/);
-    // The first action must survive the rejected second queue.
     assert.equal(takeWalletTrigger(context), first);
   });
 
@@ -112,7 +107,6 @@ describe('recordTransactionId / requireTransactionId', () => {
     assert.throws(() => recordTransactionId(context, ''), /not a Stacks transaction id/);
     assert.throws(() => recordTransactionId(context, 'a'.repeat(63)), /not a Stacks transaction id/);
     assert.throws(() => recordTransactionId(context, 'z'.repeat(64)), /not a Stacks transaction id/);
-    // Nothing may be stored by a rejected call.
     assert.throws(() => requireTransactionId(context), /no transaction id recorded/);
   });
 

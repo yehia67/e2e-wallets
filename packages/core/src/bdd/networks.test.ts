@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-// Imported with an explicit `.ts` extension because this file is executed by `node --test`
-// directly from source (Node's built-in type stripping) — there is no build step in front of it,
-// and Node does not remap a `.js` specifier onto a `.ts` file. This test is excluded from the
-// package build, so the extension never reaches `dist/`.
+// Explicit `.ts` extension: run by `node --test` straight from source, excluded from the build.
 import { parseNetworkPhrase } from './networks.ts';
 
 describe('parseNetworkPhrase', () => {
   it('resolves the sentence a .feature actually contains', () => {
-    // "Given I am connected to Stacks testnet" — the row the whole feature exists for.
     assert.deepEqual(parseNetworkPhrase('Stacks', 'testnet'), {
       chain: 'stacks',
       network: 'testnet4',
@@ -62,9 +58,7 @@ describe('parseNetworkPhrase', () => {
     assert.throws(() => parseNetworkPhrase('Ethereum', 'banana'), /Unknown chain/);
   });
 
-  // The whole point of narrowing the vocabulary: these are real Stacks networks, so "unknown" would
-  // be a lie — but no driver can reach them, and silently landing on testnet4 while the mined step
-  // polls devnet's RPC is the failure mode this rejects.
+  // Real Stacks networks, so "unknown" would be a lie — but no driver can reach them.
   for (const network of ['devnet', 'signet', 'testnet3'] as const) {
     it(`rejects the real-but-unreachable network "${network}" as not supported yet`, () => {
       assert.throws(

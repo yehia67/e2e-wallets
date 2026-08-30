@@ -140,6 +140,33 @@ MetaMask's fixture wallet has **no checked-in seed phrase** — generate one loc
 
 → **[`wallets/metamask/README.md`](./wallets/metamask/README.md)** · working setups in [`examples/metamask-spike/`](./examples/metamask-spike/) (Playwright) and [`examples/metamask-bdd/`](./examples/metamask-bdd/) (Gherkin)
 
+## Reports and artifacts
+
+A wallet test fails inside a popup that has already closed. Two calls put every result in an HTML report, with a video and screenshot of **every** open page — the dapp *and* the wallet's own popup — for passed and failed tests. Failures also retain a trace.
+
+```ts
+// playwright.config.ts
+export default withWalletReporting(defineConfig({ testDir: './tests', workers: 1 }));
+```
+
+```ts
+// tests/fixtures.ts — replaces the ~34 lines of profile/launch/cleanup boilerplate
+export const test = createExtensionTest({
+  extensionPath: 'wallets/leather/dist',
+  extensionName: 'Leather',
+  buildCommand: 'pnpm build:leather',
+  onMissingExtension: 'skip',
+});
+```
+
+```bash
+pnpm test && pnpm exec playwright show-report
+```
+
+Traces and screenshots come from Playwright itself — it does see a `launchPersistentContext`. Only the video needs attaching, which is the part `createExtensionTest` does.
+
+→ **[Full walkthrough](./tutorials/reports-and-artifacts.md)** — which artifact answers which question, the `video`/`screenshot`/`trace` modes and their precedence, and what to upload from CI.
+
 ## Bring your own account
 
 `wallet` reads every field from an environment variable, falling back to a checked-in, no-value default:

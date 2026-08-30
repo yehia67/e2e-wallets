@@ -1,17 +1,8 @@
 import type { BrowserContext } from '../index.js';
 import type { SupportedStacksNetwork } from './networks.js';
 
-/**
- * The scratch space the wallet steps hand values between each other through, and the rules for
- * using it. It lives apart from `./index.ts` — the only module that imports `playwright-bdd` — so
- * `node --test` can exercise every rule here without a browser, a Playwright runner, or that
- * optional peer dependency installed at all.
- *
- * All of it is keyed by the scenario's own `BrowserContext` rather than held in module scope. That
- * is not by itself an isolation guarantee — a worker-scoped context would be shared by every
- * scenario in that worker — which is why `resetWalletState` exists and the `I am connected to ...`
- * step calls it first thing.
- */
+// Scratch space the wallet steps pass values through, keyed by the scenario's own `BrowserContext`.
+// That is not isolation on its own — a worker-scoped context is shared — hence `resetWalletState`.
 
 /** A dapp-side action, queued to be run *inside* a driver's `trigger()` callback. */
 export type WalletTrigger = () => Promise<void>;
@@ -36,11 +27,7 @@ function stateFor(context: BrowserContext): WalletStepState {
   return state;
 }
 
-/**
- * Clears everything this context carries. Called at the top of `I am connected to ...` so a
- * scenario can never inherit a previous one's queued action, txid or network — which is a real
- * risk the moment a consuming project makes its context worker-scoped instead of test-scoped.
- */
+/** Clears everything this context carries, so a scenario never inherits a previous one's state. */
 export function resetWalletState(context: BrowserContext): void {
   stateByContext.set(context, {});
 }
@@ -56,14 +43,9 @@ export function walletNetwork(context: BrowserContext): SupportedStacksNetwork |
 }
 
 /**
- * Queues the dapp-side action that opens a wallet popup, to be run by the
- * `When I approve the wallet popup` step *inside* the driver's `trigger()` callback.
- *
- * This indirection is the whole reason the approval step is safe to write as its own Gherkin
- * sentence. Both `connectToDapp` and `confirmTransaction` register `context.waitForEvent('page')`
- * *before* awaiting `trigger()`; a dapp click performed outside that callback opens the popup
- * before anyone is listening for it, and the driver then dies on a 10-second timeout with nothing
- * useful to say. So a consumer step must never click the button itself:
+ * Queues the dapp-side action that opens a wallet popup, for the approval step to run *inside* the
+ * driver's `trigger()` callback. A consumer step must never click the button itself: the driver
+ * registers its popup listener before awaiting `trigger()`, so an earlier click is missed entirely.
  *
  * ```ts
  * When('I request a transfer of {int} STX', async ({ context, page }) => {
@@ -76,8 +58,6 @@ export function walletNetwork(context: BrowserContext): SupportedStacksNetwork |
 export function queueWalletTrigger(context: BrowserContext, trigger: WalletTrigger): void {
   const state = stateFor(context);
   if (state.pendingTrigger) {
-    // Overwriting would drop the first action on the floor and leave the scenario reading as
-    // though both ran. Two queued actions means a missing approval step, not a second queue.
     throw new Error(
       `[@wallets-e2e/core/bdd] A wallet action is already queued and has not been approved yet. ` +
         `Each step that queues one needs its own "I approve the wallet popup" step after it — ` +
@@ -87,10 +67,7 @@ export function queueWalletTrigger(context: BrowserContext, trigger: WalletTrigg
   state.pendingTrigger = trigger;
 }
 
-/**
- * Takes the queued action, clearing it in the same breath. One-shot on purpose: leaving it in place
- * would let a second approval step silently re-run the previous action and still report a pass.
- */
+/** One-shot: leaving it in place would let a second approval step re-run the previous action. */
 export function takeWalletTrigger(context: BrowserContext): WalletTrigger {
   const state = stateFor(context);
   const trigger = state.pendingTrigger;
@@ -110,13 +87,8 @@ export function takeWalletTrigger(context: BrowserContext): WalletTrigger {
 const TXID_PATTERN = /^(0x)?[0-9a-f]{64}$/i;
 
 /**
- * Records the transaction id a consumer step read off the dapp, for `Then the transaction is
- * mined` to poll. Which element carries the txid is the dapp's own knowledge, never this
- * library's.
- *
- * The shape is validated here rather than trusted, so scraping the wrong element (or catching a
- * label along with the value) fails at the step that did the scraping — not two steps later as a
- * confusing "no transaction id recorded", nor as a 15-minute poll for a txid that cannot exist.
+ * Records the txid a consumer step read off the dapp. The shape is validated here so scraping the
+ * wrong element fails at that step, not as a 15-minute poll for a txid that cannot exist.
  */
 export function recordTransactionId(context: BrowserContext, txid: string): void {
   const trimmed = txid.trim();
@@ -128,8 +100,6 @@ export function recordTransactionId(context: BrowserContext, txid: string): void
     );
   }
   const state = stateFor(context);
-  // A second record without a mine (or a reset) would silently drop the first id and poll the
-  // wrong transaction — the same one-shot rule as queueWalletTrigger.
   if (state.txid) {
     throw new Error(
       `[@wallets-e2e/core/bdd] A transaction id is already recorded for this scenario ` +

@@ -1,16 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-// Explicit `.ts` extension for the same reason as `networks.test.ts`: this file is run by
-// `node --test` straight from source, and is excluded from the package build.
+// Explicit `.ts` extension: run by `node --test` straight from source, excluded from the build.
 import { requireDriver, requireNetworkSwitch, requireSeedPhrase, requireTest } from './guards.ts';
 import type { WalletDriver } from '../index.js';
 import type { SupportedStacksNetwork } from './networks.ts';
 
 type StacksDriver = WalletDriver<SupportedStacksNetwork>;
 
-// Covers the "Driver not registered" row of the spec's I/O & Edge-Case Matrix. The guards live
-// apart from `./index.ts` precisely so this row is covered by a real, registered test rather than
-// a manual check — `./index.ts` imports `playwright-bdd`, which `node --test` has no reason to load.
 describe('requireDriver', () => {
   it('throws immediately when no driver was registered', () => {
     assert.throws(() => requireDriver(undefined));
@@ -29,7 +25,7 @@ describe('requireDriver', () => {
   });
 
   it('returns the driver untouched when one is registered', () => {
-    // Structural stand-in: the guard only checks presence, so a full driver is unnecessary here.
+    // Structural stand-in: the guard only checks presence.
     const driver = { importWallet: async () => ({ address: 'ST0' }) } as never;
     assert.equal(requireDriver(driver), driver);
   });
@@ -68,8 +64,7 @@ describe('requireSeedPhrase', () => {
 
 describe('requireTest', () => {
   it('throws when no test object was passed', () => {
-    // createBdd(undefined) is legal, so nothing downstream would complain — the steps would just
-    // bind to stock fixtures and time out inside importWallet with no explanation.
+    // createBdd(undefined) is legal: the steps would bind to stock fixtures and time out silently.
     assert.throws(() => requireTest(undefined));
   });
 
@@ -92,8 +87,7 @@ describe('requireTest', () => {
   });
 });
 
-// Covers the safety half of the spec's network handling: a driver that cannot switch networks must
-// never be allowed to leave the wallet on its mainnet default while the scenario says "testnet".
+// A driver that cannot switch networks must never be left on mainnet by a "testnet" scenario.
 describe('requireNetworkSwitch', () => {
   const driverWithSwitch = {
     importWallet: async () => ({ address: 'ST0' }),
@@ -143,7 +137,6 @@ describe('requireNetworkSwitch', () => {
   });
 
   it('calls the switch on the driver, not on a detached function', async () => {
-    // Bound, so a driver written with `this`-dependent internals still works.
     let receivedThis: unknown;
     const driver = {
       async switchNetwork(this: unknown) {
@@ -156,8 +149,6 @@ describe('requireNetworkSwitch', () => {
   });
 
   it('passes the parsed network through to the driver, not just the context', async () => {
-    // The whole point of `switchNetwork(context, network)` over the old no-argument verb: a
-    // driver that is never told which network cannot honour the sentence that named one.
     const received: unknown[] = [];
     const driver = {
       async switchNetwork(context: unknown, network: unknown) {
