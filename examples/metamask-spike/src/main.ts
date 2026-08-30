@@ -2,7 +2,6 @@ import {
   createPublicClient,
   createWalletClient,
   custom,
-  http,
   parseAbi,
   parseEther,
   hexToSignature,
@@ -52,9 +51,9 @@ const vaultAbi = parseAbi([
 ]);
 
 async function loadDeployed(): Promise<DeployedConfig> {
-  const res = await fetch('/deployed.sepolia.json');
+  const res = await fetch('/deployed.json');
   if (!res.ok) {
-    throw new Error('deployed.sepolia.json missing — run: node examples/metamask-spike/scripts/deploy-sepolia.mjs');
+    throw new Error('deployed.json missing — run: node examples/metamask-spike/scripts/deploy.mjs');
   }
   deployed = (await res.json()) as DeployedConfig;
   return deployed;
@@ -74,23 +73,36 @@ async function getAccount(): Promise<`0x${string}`> {
   return accounts[0] as `0x${string}`;
 }
 
-async function ensureSepoliaChain(): Promise<void> {
+/**
+ * Best-effort nudge onto whichever chain the contracts were deployed to. The chain id comes from
+ * `deployed.json`, never a literal — this page is not tied to one network any more than the driver
+ * is. With nothing deployed there is nothing to nudge towards, and the wallet driver has already
+ * selected the network anyway.
+ */
+async function ensureDeployedChain(): Promise<void> {
   if (!window.ethereum) throw new Error('No injected wallet');
-  const chainId = (await window.ethereum.request({ method: 'eth_chainId' })) as string;
-  if (chainId === '0xaa36a7') return;
+  let cfg: DeployedConfig;
+  try {
+    cfg = await loadDeployed();
+  } catch {
+    return;
+  }
+  const want = `0x${cfg.chainId.toString(16)}`;
+  const chainId = ((await window.ethereum.request({ method: 'eth_chainId' })) as string).toLowerCase();
+  if (chainId === want) return;
   try {
     await window.ethereum.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0xaa36a7' }],
+      params: [{ chainId: want }],
     });
   } catch {
-    // Driver already switched MetaMask to Sepolia; ignore if the dapp cannot prompt.
+    // The driver already put MetaMask on the network; ignore if the dapp cannot prompt.
   }
 }
 
 connectBtn!.addEventListener('click', async () => {
   if (!window.ethereum) throw new Error('No injected wallet');
-  await ensureSepoliaChain();
+  await ensureDeployedChain();
   const accounts = (await window.ethereum.request({ method: 'eth_requestAccounts' })) as string[];
   addrEl!.textContent = accounts[0] ?? '';
 });
@@ -99,14 +111,15 @@ sendEthBtn!.addEventListener('click', async () => {
   txEl!.textContent = '';
   try {
     if (!window.ethereum) throw new Error('No injected wallet');
-    await ensureSepoliaChain();
+    await ensureDeployedChain();
     const accounts = (await window.ethereum.request({ method: 'eth_accounts' })) as string[];
     const from = accounts[0];
     if (!from) throw new Error('Not connected — click Connect first');
     const value = '0x5af3107a4000'; // 0.0001 ETH — enough for a smoke send without draining the faucet wallet
     const txHash = (await window.ethereum.request({
       method: 'eth_sendTransaction',
-      params: [{ from, to: from, value, chainId: '0xaa36a7' }] as unknown as [Record<string, string>],
+      // No explicit chainId: MetaMask signs on whatever network the driver selected.
+      params: [{ from, to: from, value }] as unknown as [Record<string, string>],
     })) as string;
     txEl!.textContent = txHash;
   } catch (err) {
@@ -160,9 +173,10 @@ permitSignBtn!.addEventListener('click', async () => {
   try {
     const cfg = await loadDeployed();
     const account = await getAccount();
+    if (!window.ethereum) throw new Error('No injected wallet');
     const publicClient = createPublicClient({
       chain: sepolia,
-      transport: http(cfg.rpcUrl),
+      transport: custom(window.ethereum),
     });
     const walletClient = getWalletClient();
     const nonce = await publicClient.readContract({

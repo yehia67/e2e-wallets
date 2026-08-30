@@ -1,67 +1,59 @@
 #!/usr/bin/env node
 /**
- * Download MetaMask's official test build (chrome) from CI artifacts — no yarn install
- * in metamask/metamask-extension required. Mirrors `.devcontainer/download-builds.ts`.
+ * Download the pinned, official MetaMask production build used by Synpress.
+ *
+ * The old implementation followed MetaMask's latest successful CI run and downloaded its
+ * `build:test` artifact. Those artifacts deliberately fall back to an all-zero Infura project
+ * id, so built-in Sepolia can render in the picker while every real RPC call fails with 401.
+ * A moving CI artifact also makes the driver's selectors change without a release in this repo.
  *
  * Usage: node wallets/metamask/scripts/download-test-build.mjs <output-dir>
  */
-import { execSync } from 'node:child_process';
-import { createWriteStream, mkdirSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createWriteStream, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 
+export const METAMASK_VERSION = '13.13.1';
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const outDir = process.argv[2] ?? join(scriptDir, '..', 'dist');
-const CLOUDFRONT = process.env.AWS_CLOUDFRONT_URL ?? 'https://diuv6g5fj9pvx.cloudfront.net';
-const OWNER = 'MetaMask';
-const REPO = 'metamask-extension';
-const WORKFLOW = 'main.yml';
-
-async function githubJson(path) {
-  const res = await fetch(`https://api.github.com${path}`, {
-    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'wallets-e2e-metamask-build' },
-  });
-  if (!res.ok) throw new Error(`GitHub API ${path} → ${res.status}`);
-  return res.json();
-}
+const archiveName = `metamask-chrome-${METAMASK_VERSION}.zip`;
+const archiveUrl =
+  `https://github.com/MetaMask/metamask-extension/releases/download/v${METAMASK_VERSION}/${archiveName}`;
 
 async function main() {
-  const runs = await githubJson(
-    `/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/runs?branch=main&status=success&per_page=1`,
-  );
-  const run = runs.workflow_runs?.[0];
-  if (!run) throw new Error('No successful MetaMask CI run found on main');
+  const zipPath = join(outDir, '..', `.${archiveName}`);
+  console.log(`[download-metamask] Fetching pinned production release ${METAMASK_VERSION}`);
 
-  const pkgRes = await fetch(
-    `https://raw.githubusercontent.com/${OWNER}/${REPO}/${run.head_sha}/package.json`,
-  );
-  if (!pkgRes.ok) throw new Error(`Could not fetch package.json for ${run.head_sha}`);
-  const { version } = await pkgRes.json();
+  const response = await fetch(archiveUrl, { redirect: 'follow' });
+  if (!response.ok || !response.body) {
+    throw new Error(`Download failed: HTTP ${response.status} ${archiveUrl}`);
+  }
 
-  const hostUrl = `${CLOUDFRONT}/${REPO}/${run.id}`;
-  const zipUrl = `${hostUrl}/build-test-webpack/builds/metamask-chrome-${version}.zip`;
-  console.log(`[download-test-build] Run ${run.id}, version ${version}`);
-  console.log(`[download-test-build] Fetching ${zipUrl}`);
-
-  const zipRes = await fetch(zipUrl);
-  if (!zipRes.ok) throw new Error(`Download failed: ${zipRes.status} ${zipUrl}`);
-
-  // Use unzip via system command — Node has no built-in zip extract without deps.
-  const tmpZip = join(outDir, '..', `.metamask-chrome-${run.id}.zip`);
-  mkdirSync(dirname(tmpZip), { recursive: true });
-  await pipeline(Readable.fromWeb(zipRes.body), createWriteStream(tmpZip));
+  mkdirSync(dirname(zipPath), { recursive: true });
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(zipPath));
 
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
-  execSync(`unzip -q -o "${tmpZip}" -d "${outDir}"`, { stdio: 'inherit' });
-  rmSync(tmpZip, { force: true });
+  execFileSync('unzip', ['-q', '-o', zipPath, '-d', outDir], { stdio: 'inherit' });
+  rmSync(zipPath, { force: true });
 
-  console.log(`[download-test-build] Extracted to ${outDir}`);
+  const manifestPath = join(outDir, 'manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  if (manifest.version !== METAMASK_VERSION) {
+    rmSync(outDir, { recursive: true, force: true });
+    throw new Error(
+      `Unexpected MetaMask version ${String(manifest.version)}; expected ${METAMASK_VERSION}.`,
+    );
+  }
+
+  console.log(`[download-metamask] Extracted and verified MetaMask ${METAMASK_VERSION} at ${outDir}`);
 }
 
-main().catch((err) => {
-  console.error('[download-test-build] ERROR:', err.message ?? err);
+main().catch((error) => {
+  console.error('[download-metamask] ERROR:', error?.message ?? error);
   process.exit(1);
 });

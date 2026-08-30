@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Record docs/metamask-demo-full-flow.gif only after the FULL spike demo passes:
-# unlock → Sepolia → connect → ETH transfer (mined) → ERC20 approve → deposit (mined).
+# unlock → network switch → connect → ETH transfer (mined) → ERC20 approve → deposit (mined).
 # Connect-only or partial runs never produce a GIF.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SPIKE="$ROOT/examples/metamask-spike"
-DEPLOYED="$SPIKE/deployed.sepolia.json"
+DEPLOYED="$SPIKE/deployed.json"
 ENV_LOCAL="$ROOT/wallets/metamask/.env.local"
 
 if [[ ! -f "$ENV_LOCAL" ]]; then
@@ -15,7 +15,7 @@ fi
 if [[ ! -f "$DEPLOYED" ]]; then
   echo "Missing $DEPLOYED — run:"
   echo "  cd examples/metamask-spike && forge build"
-  echo "  node examples/metamask-spike/scripts/deploy-sepolia.mjs"
+  echo "  node examples/metamask-spike/scripts/deploy.mjs"
   exit 1
 fi
 

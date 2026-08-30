@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * Deploy TestToken + DepositVault to Sepolia and mint test tokens to the fixture wallet.
+ * Deploy TestToken + DepositVault to an EVM network and mint test tokens to the fixture wallet.
+ *
+ * The target network is a value (`NETWORK` below), not this script's identity — point it at
+ * another `EVM_NETWORKS` preset and the same deploy runs there.
  *
  * Prerequisites:
  *   - forge build (OpenZeppelin deps installed)
  *   - wallets/metamask/.env.local with WALLETS_E2E_ETH_PRIVATE_KEY and WALLETS_E2E_ETH_ADDRESS
- *   - Sepolia ETH on the deployer address
+ *   - Native gas token on the deployer address for the target network
  *
  * Usage (from repo root):
- *   node examples/metamask-spike/scripts/deploy-sepolia.mjs
+ *   node examples/metamask-spike/scripts/deploy.mjs
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -22,7 +25,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { resolveWorkingSepoliaRpc } from '@wallets-e2e/core';
+import { EVM_NETWORKS, resolveWorkingRpc } from '@wallets-e2e/core';
 
 const spikeRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(spikeRoot, '..', '..');
@@ -70,8 +73,9 @@ function readArtifact(contractName) {
 
 const MINT_AMOUNT = parseEther('10000');
 const DEPOSIT_AMOUNT = parseEther('1');
-const SEPOLIA_RPC_URL = await resolveWorkingSepoliaRpc();
-console.log('Using Sepolia RPC (no API key):', SEPOLIA_RPC_URL);
+const NETWORK = EVM_NETWORKS.sepolia;
+const RPC_URL = await resolveWorkingRpc(NETWORK);
+console.log(`Using ${NETWORK.name} RPC (no API key):`, RPC_URL);
 
 const env = loadEnvLocal();
 const privateKey = env.WALLETS_E2E_ETH_PRIVATE_KEY?.trim();
@@ -86,13 +90,13 @@ const account = privateKeyToAccount(privateKey.startsWith('0x') ? privateKey : `
 
 const publicClient = createPublicClient({
   chain: sepolia,
-  transport: http(SEPOLIA_RPC_URL),
+  transport: http(RPC_URL),
 });
 
 const walletClient = createWalletClient({
   account,
   chain: sepolia,
-  transport: http(SEPOLIA_RPC_URL),
+  transport: http(RPC_URL),
 });
 
 const tokenArtifact = readArtifact('TestToken');
@@ -133,8 +137,8 @@ await publicClient.waitForTransactionReceipt({ hash: transferHash });
 console.log(`Minted ${MINT_AMOUNT} tokens to fixture wallet ${recipient}`);
 
 const deployed = {
-  chainId: sepolia.id,
-  rpcUrl: SEPOLIA_RPC_URL,
+  chainId: NETWORK.chainId,
+  rpcUrl: RPC_URL,
   tokenAddress,
   vaultAddress,
   depositAmount: DEPOSIT_AMOUNT.toString(),
@@ -143,8 +147,8 @@ const deployed = {
 };
 
 const outPaths = [
-  join(spikeRoot, 'deployed.sepolia.json'),
-  join(spikeRoot, 'public', 'deployed.sepolia.json'),
+  join(spikeRoot, 'deployed.json'),
+  join(spikeRoot, 'public', 'deployed.json'),
 ];
 for (const outPath of outPaths) {
   writeFileSync(outPath, `${JSON.stringify(deployed, null, 2)}\n`);

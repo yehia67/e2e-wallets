@@ -34,7 +34,7 @@ import { leatherDriver } from '@wallets-e2e/leather';
 
 - `launchContext({ extensionPath, userDataDir, recordVideoDir, headless? })` -- the ONE place a persistent Chromium context with the extension loaded gets created. Never call `chromium.launch`/`launchPersistentContext` directly when this package is available.
 - `leatherDriver.importWallet(context, seedPhrase)` -- unlocks Leather via an existing seed phrase. Returns `{ address }` (the mainnet-form address, since that's what Leather's own persisted storage actually surfaces).
-- `leatherDriver.switchToTestnetNetwork?.(context)` -- **call this before any real transfer or contract call.** Leather defaults to mainnet regardless of what network your `request()` call names; an account with no mainnet balance crashes Leather's fee-estimation step outright, before any UI even renders. Optional-chained because not every wallet driver may need an explicit network-switch step.
+- `leatherDriver.switchNetwork?.(context, 'testnet4')` -- **call this before any real transfer or contract call.** Leather defaults to mainnet regardless of what network your `request()` call names; an account with no mainnet balance crashes Leather's fee-estimation step outright, before any UI even renders. The network is an argument, so the same port verb serves every chain (MetaMask's driver takes an `EvmNetwork` value here). Optional-chained because not every wallet driver may need an explicit network-switch step.
 - `leatherDriver.connectToDapp(context, trigger)` -- `trigger` is entirely your job: click your dapp's own "Connect Wallet" button, then call `selectWalletInStacksConnectModal(page, 'Leather')` to pick Leather in `@stacks/connect`'s own in-page wallet picker (that picker is `@stacks/connect`'s UI, not Leather's -- this helper lives in `core`, not the driver, for that reason).
 - `leatherDriver.confirmTransaction(context, trigger)` -- approves *any* popup requesting a signature or transaction (a signed message, a transfer, a contract call -- same method, no special-casing needed). `trigger` is whatever dapp-side action opens that popup.
 - `waitForTransactionMined(txid, { rpcUrl?, timeoutMs?, pollIntervalMs? })` -- polls a Stacks API until the transaction is `success` or `abort_by_*`. Default `rpcUrl` is `TESTNET_RPC_URL`. **Never treat "the popup closed" as proof a transaction landed** -- always confirm via this function for a real transfer or contract call.
@@ -56,7 +56,7 @@ test('sends a real STX transfer', async () => {
   await page.goto('http://localhost:3000');
 
   await leatherDriver.importWallet(context, process.env.WALLETS_E2E_SEED_PHRASE!);
-  await leatherDriver.switchToTestnetNetwork?.(context);
+  await leatherDriver.switchNetwork?.(context, 'testnet4');
 
   await leatherDriver.connectToDapp(context, async () => {
     await page.getByRole('button', { name: 'Connect Wallet' }).click();
@@ -103,7 +103,7 @@ Steps shipped by the package:
 | `When I approve the wallet popup` | Runs the queued dapp action inside `confirmTransaction`'s `trigger()` and approves the popup |
 | `Then the transaction is mined` | Polls the Stacks API for the recorded txid; fails on `abort_by_*` or timeout. **Spends real testnet STX and waits on a real block (~10 min).** Its default poll allows 15 minutes -- above any sane Playwright timeout -- so the scenario needs a `@timeout:` tag (e.g. `@timeout:1_200_000`) or Playwright kills the test first |
 
-`Given I am connected to Stacks testnet` resolves the word `testnet` to `testnet4`. Only `mainnet`, `testnet` and `testnet4` are accepted: the `WalletDriver` port offers exactly one network operation (`switchToTestnetNetwork`), so those are the only outcomes a driver can honour. `devnet`/`signet`/`testnet3` are rejected with a distinct "not supported yet" message rather than silently landing on testnet4, and an unknown word throws before anything launches, listing what's valid.
+`Given I am connected to Stacks testnet` resolves the word `testnet` to `testnet4`. Only `mainnet`, `testnet` and `testnet4` are accepted: these steps hand `switchNetwork()` a Stacks network word, and those are the only ones Leather's own picker is proven against. `devnet`/`signet`/`testnet3` are rejected with a distinct "not supported yet" message rather than silently landing on testnet4, and an unknown word throws before anything launches, listing what's valid.
 
 ```ts
 // steps/fixtures.ts -- note `test` comes from playwright-bdd, not @playwright/test

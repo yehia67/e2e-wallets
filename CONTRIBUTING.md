@@ -31,14 +31,17 @@ Every wallet extension this project supports is driven the same way, through one
 - **`packages/core`** owns the parts that don't change per wallet: launching the browser with an extension loaded (`launchContext`), figuring out the extension's runtime ID (`resolveExtensionId`), and the `WalletDriver` interface every wallet adapter implements.
 - **`wallets/<name>`** is one package per wallet. Each implements `WalletDriver`:
   ```ts
-  interface WalletDriver {
+  interface WalletDriver<TNetwork = never> {
     importWallet(context: BrowserContext, seedPhrase: string): Promise<WalletAccount>;
+    // The network is a parameter, not part of the verb — `TNetwork` is whatever value that chain
+    // names a network with (a Stacks network word for Leather, an `EvmNetwork` for MetaMask).
+    switchNetwork?(context: BrowserContext, network: TNetwork): Promise<void>;
     connectToDapp(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
     confirmTransaction(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
     confirmSignature?(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
   }
   ```
-  `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural. `wallets/metamask` is the second adapter (Ethereum / Sepolia via MetaMask's test build).
+  `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural. `wallets/metamask` is the second adapter — the pinned official MetaMask 13.13.1 production extension, driving **any** EVM network: `switchNetwork(context, network)` keeps built-in providers intact and validates custom networks or explicit RPC overrides before adding them.
 - **`examples/spike`** holds the actual Playwright tests that exercise a driver end to end. **`examples/react-connect`** is a real dapp with a real `@stacks/connect` integration, and **`examples/bdd`** drives that same dapp from Gherkin `.feature` files through the step library in `packages/core/src/bdd/`.
 
 ## Adding a new wallet adapter
@@ -49,7 +52,7 @@ Every wallet extension this project supports is driven the same way, through one
 4. Write the equivalent of `examples/spike`'s test for the new wallet, covering at minimum: happy path, a missing-build error case, and a malformed-input error case that must fail loudly rather than silently reporting success.
 5. Verify the address/account your driver returns against an independent derivation (e.g. via `@stacks/wallet-sdk`) rather than trusting that "the UI flow completed" means it actually worked.
 
-### MetaMask (Sepolia) setup
+### MetaMask (EVM) setup
 
 MetaMask's fixture wallet has **no checked-in seed phrase** — you must generate one locally:
 
@@ -59,7 +62,7 @@ node wallets/metamask/scripts/generate-fixture-wallet.mjs   # prints a Sepolia f
 # Do NOT `source wallets/metamask/.env.local` — seed phrases contain spaces; tests load it via fixtures/wallet.ts.
 pnpm build:metamask
 cd examples/metamask-spike && forge build && cd ../../..      # ERC20 spike contracts
-node examples/metamask-spike/scripts/deploy-sepolia.mjs       # deploy token + vault, mint WET
+node examples/metamask-spike/scripts/deploy.mjs               # deploy token + vault, mint WET
 pnpm --filter @wallets-e2e/example-metamask-spike test
 ```
 

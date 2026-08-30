@@ -1,31 +1,51 @@
-import { SEPOLIA_RPC_URL, waitForEthTransactionMined } from '@wallets-e2e/core';
+import {
+  EVM_NETWORKS,
+  createInjectedEvmRpc,
+  waitForEthTransactionMined,
+} from '@wallets-e2e/core';
 import { metamaskDriver } from '@wallets-e2e/metamask';
 import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
 import { test, expect } from './fixtures.js';
 import { readVaultBalance, requireDeployedContracts } from './contracts.js';
 
+/** The network under test — an argument to the driver, not baked into it. */
+const NETWORK = EVM_NETWORKS.sepolia;
+
 test.describe('ERC20 deposit via approve', () => {
   test('approves token allowance and deposits into the vault', async ({ extensionContext }, testInfo) => {
+    test.skip(
+      process.env.WALLETS_E2E_RUN_SEPOLIA !== '1',
+      'Set WALLETS_E2E_RUN_SEPOLIA=1 to authorize a gas-spending Sepolia test.',
+    );
     test.setTimeout(10 * 60 * 1000);
     const deployed = requireDeployedContracts(testInfo);
     const depositAmount = BigInt(deployed.depositAmount);
 
     await metamaskDriver.importWallet(extensionContext, wallet.seedPhrase);
-    await metamaskDriver.switchToTestnetNetwork?.(extensionContext);
-
     const appPage = await extensionContext.newPage();
     await appPage.goto('/');
+    await metamaskDriver.switchNetwork?.(extensionContext, NETWORK);
 
     await metamaskDriver.connectToDapp(extensionContext, async () => {
       await appPage.getByTestId('connect-wallet').click();
     });
 
-    const balanceBefore = await readVaultBalance(deployed.vaultAddress, wallet.address);
+    const requester = createInjectedEvmRpc(appPage);
+    const balanceBefore = await readVaultBalance(deployed.vaultAddress, wallet.address, requester);
 
-    await metamaskDriver.confirmTransaction(extensionContext, async () => {
+    await metamaskDriver.approveTokenPermission(extensionContext, async () => {
       await appPage.getByTestId('approve-token').click();
     });
     await expect(appPage.getByTestId('deposit-status')).toContainText(/^approve-tx:0x/i, { timeout: 30_000 });
+    const approvalHash = (await appPage.getByTestId('deposit-status').innerText())
+      .replace(/^approve-tx:/i, '')
+      .trim();
+    expect(
+      await waitForEthTransactionMined(approvalHash, {
+        requester,
+        timeoutMs: 8 * 60 * 1000,
+      }),
+    ).toBe('success');
 
     await metamaskDriver.confirmTransaction(extensionContext, async () => {
       await appPage.getByTestId('deposit-after-approve').click();
@@ -35,12 +55,12 @@ test.describe('ERC20 deposit via approve', () => {
     const depositStatus = await appPage.getByTestId('deposit-status').innerText();
     const txHash = depositStatus.replace(/^deposit-tx:/i, '').trim();
     const status = await waitForEthTransactionMined(txHash, {
-      rpcUrl: SEPOLIA_RPC_URL,
+      requester,
       timeoutMs: 8 * 60 * 1000,
     });
     expect(status).toBe('success');
 
-    const balanceAfter = await readVaultBalance(deployed.vaultAddress, wallet.address);
+    const balanceAfter = await readVaultBalance(deployed.vaultAddress, wallet.address, requester);
     expect(balanceAfter - balanceBefore).toBe(depositAmount);
   });
 });

@@ -12,6 +12,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
+  grepInvert:
+    process.env.WALLETS_E2E_RUN_SEPOLIA === '1' ? undefined : /@sepolia-spending/,
   timeout: 120_000,
   use: {
     channel: 'chromium',

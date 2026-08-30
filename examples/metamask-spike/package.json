@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Proving test: real MetaMask extension on Sepolia — unlock, connect, send.",
+  "description": "Proving test: real MetaMask extension on any EVM network — unlock, pick network, connect, send.",
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
     "build:contracts": "forge build",
-    "deploy:sepolia": "node ./scripts/deploy-sepolia.mjs",
+    "deploy": "node ./scripts/deploy.mjs",
     "test": "playwright test"
   },
   "dependencies": {

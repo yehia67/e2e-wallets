@@ -9,7 +9,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
-  timeout: 120_000,
+  // Import (~25s) + network switch (~55s) + connect (~30s) is ~2 minutes of real-extension setup
+  // before a test's own assertions even begin. At 120s the connect spec failed on time alone.
+  // On-chain tests raise this further themselves.
+  timeout: 300_000,
   use: {
     channel: 'chromium',
     video: 'on',

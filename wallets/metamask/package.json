@@ -2,7 +2,7 @@
   "name": "@wallets-e2e/metamask",
   "version": "0.1.0",
   "type": "module",
-  "description": "WalletDriver adapter for the real MetaMask browser extension (test build), targeting Sepolia.",
+  "description": "WalletDriver adapter for the pinned official MetaMask 13.13.1 production extension, for any EVM network.",
   "keywords": [
     "playwright",
     "ethereum",
@@ -12,7 +12,7 @@
     "blockchain",
     "web3",
     "browser-extension",
-    "sepolia"
+    "evm"
   ],
   "license": "MIT",
   "repository": {

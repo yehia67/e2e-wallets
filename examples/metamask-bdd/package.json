@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Gherkin .feature specs driving the real MetaMask extension on Sepolia through @wallets-e2e/core/bdd, against examples/metamask-spike.",
+  "description": "Gherkin .feature specs driving the real MetaMask extension on an EVM network through @wallets-e2e/core/bdd, against examples/metamask-spike.",
   "engines": {
     "node": ">=22.18"
   },

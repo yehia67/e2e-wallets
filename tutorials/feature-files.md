@@ -203,7 +203,7 @@ That `@timeout:` tag is playwright-bdd syntax, not product language. Keep it; wi
 
 **In the feature file:** what a product owner means — connected, requested a transfer, approved, saw a txid, mined.
 
-**Not in the feature file:** seed phrases, extension paths, `switchToTestnetNetwork`, raw `Page` / popup listeners. Those stay in fixtures and in `@wallets-e2e/core/bdd`.
+**Not in the feature file:** seed phrases, extension paths, `switchNetwork`, raw `Page` / popup listeners. Those stay in fixtures and in `@wallets-e2e/core/bdd`.
 
 Do **not** split connect into granular `Given I click connect` / `When I approve` pairs that put the click outside `trigger()` — that reopens the timeout trap the coarse step exists to hide.
 

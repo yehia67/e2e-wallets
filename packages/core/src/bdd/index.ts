@@ -1,6 +1,6 @@
 import type { TestType } from '@playwright/test';
 import { createBdd } from 'playwright-bdd';
-import type { BrowserContext, Page, WalletDriver } from '../index.js';
+import type { BrowserContext, Page } from '../index.js';
 import {
   STACKS_NETWORK_RPC_URLS,
   selectWalletInStacksConnectModal,
@@ -12,6 +12,7 @@ import {
   requireSeedPhrase,
   requireTest,
 } from './guards.js';
+import type { WalletStepsDriver } from './guards.js';
 import { assertMinedStatus } from './mined.js';
 import { parseNetworkPhrase } from './networks.js';
 import {
@@ -24,7 +25,7 @@ import {
 
 export { parseNetworkPhrase } from './networks.js';
 export type { ParsedNetworkPhrase, SupportedStacksNetwork } from './networks.js';
-export { queueWalletTrigger, recordTransactionId } from './state.js';
+export { queueWalletTrigger, recordTransactionId, takeWalletTrigger } from './state.js';
 export type { WalletTrigger } from './state.js';
 
 /**
@@ -61,7 +62,7 @@ export interface CreateWalletStepsOptions {
    * library never imports a wallet package itself — every wallet depends on core, so the reverse
    * would be circular. The driver is injected here instead.
    */
-  driver: WalletDriver;
+  driver: WalletStepsDriver;
   /** Seed phrase the wallet is imported from. Read this from an env-var-backed fixture, never a real-value key in source. */
   seedPhrase: string;
   /**

@@ -37,8 +37,8 @@ _bmad-output/
 # MetaMask fixture secrets (never commit)
 wallets/metamask/.env.local
 examples/metamask-spike/.env.local
-examples/metamask-spike/deployed.sepolia.json
-examples/metamask-spike/public/deployed.sepolia.json
+examples/metamask-spike/deployed.json
+examples/metamask-spike/public/deployed.json
 examples/metamask-spike/out/
 examples/metamask-spike/lib/
 examples/metamask-spike/cache/

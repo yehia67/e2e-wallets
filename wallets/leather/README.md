@@ -48,7 +48,7 @@ test('connects to my dapp', async () => {
 
 ## What's exported
 
-- `leatherDriver` — implements `@wallets-e2e/core`'s `WalletDriver`: `importWallet`, `connectToDapp`, `confirmTransaction`, `switchToTestnetNetwork`.
+- `leatherDriver` — implements `@wallets-e2e/core`'s `WalletDriver<SupportedStacksNetwork>`: `importWallet`, `connectToDapp`, `confirmTransaction`, `switchNetwork(context, network)`.
 - `./fixtures/wallet.js` — a fixture wallet for testing. Reads `WALLETS_E2E_SEED_PHRASE`/`WALLETS_E2E_MAINNET_ADDRESS`/`WALLETS_E2E_TESTNET_ADDRESS`/`WALLETS_E2E_PASSWORD` from the environment first, falling back to a safe, checked-in, no-value default.
 
 ## Full docs

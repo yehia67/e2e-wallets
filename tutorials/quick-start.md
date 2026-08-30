@@ -74,7 +74,7 @@ import { leatherDriver } from '@wallets-e2e/leather';
 //    balance crashes Leather's own fee-estimation step outright, not gracefully. This project
 //    tried a local Clarinet devnet first and dropped it (two real, unrelated Clarinet 3.23.1
 //    bugs made it unusable); real testnet is used instead.
-await leatherDriver.switchToTestnetNetwork?.(context);
+await leatherDriver.switchNetwork?.(context, 'testnet4');
 
 await leatherDriver.confirmTransaction(context, async () => {
   await page.getByRole('button', { name: 'Send STX' }).click(); // your dapp's own trigger

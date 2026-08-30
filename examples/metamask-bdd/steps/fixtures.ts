@@ -9,7 +9,7 @@ import { wallet } from '@wallets-e2e/metamask/fixtures/wallet.js';
 import { test as base } from 'playwright-bdd';
 
 export const EXTENSION_PATH = join(import.meta.dirname, '../../../wallets/metamask/dist');
-const DEPLOYED_PATH = join(import.meta.dirname, '../../metamask-spike/deployed.sepolia.json');
+const DEPLOYED_PATH = join(import.meta.dirname, '../../metamask-spike/deployed.json');
 
 const REQUIRE_EXTENSION = process.env.WALLETS_E2E_REQUIRE_EXTENSION === '1';
 
