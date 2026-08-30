@@ -9,11 +9,11 @@ pnpm build:metamask
 cd ../metamask-spike && forge build && cd ../metamask-bdd
 node ../metamask-spike/scripts/deploy.mjs   # ERC20 scenarios only
 pnpm --filter @wallets-e2e/core build
-WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm --filter @wallets-e2e/example-metamask-bdd test
+pnpm --filter @wallets-e2e/example-metamask-bdd test
 ```
 
-This runs the non-spending connect scenario. Add `WALLETS_E2E_RUN_SEPOLIA=1` to include the tagged
-ERC20 scenarios; they spend live Sepolia gas and token balances.
+Every scenario runs — nothing is skipped. The ERC20 scenarios spend live Sepolia gas and token
+balances from the fixture wallet, so fund it first.
 
 See [`wallets/metamask/README.md`](../../wallets/metamask/README.md) for fixture wallet rules (**keep your funded address — do not `generate --force`**).
 

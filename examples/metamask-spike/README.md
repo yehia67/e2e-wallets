@@ -27,14 +27,13 @@ node examples/metamask-spike/scripts/deploy.mjs
 ## Run tests
 
 ```bash
-WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm --filter @wallets-e2e/example-metamask-spike test
+pnpm --filter @wallets-e2e/example-metamask-spike test
 ```
 
 Import, network, and connect tests are non-spending. ETH transfer and both ERC20 deposit paths are
 opt-in because they spend live Sepolia gas:
 
 ```bash
-WALLETS_E2E_REQUIRE_EXTENSION=1 WALLETS_E2E_RUN_SEPOLIA=1 \
   pnpm --filter @wallets-e2e/example-metamask-spike test
 ```
 
@@ -47,5 +46,5 @@ For built-in Sepolia, `switchNetwork` selects MetaMask's existing network withou
 Just the network switch (the fastest way to see the driver work):
 
 ```bash
-WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm --filter @wallets-e2e/example-metamask-spike exec playwright test tests/0-network-switch.spec.ts
+pnpm --filter @wallets-e2e/example-metamask-spike exec playwright test tests/0-network-switch.spec.ts
 ```

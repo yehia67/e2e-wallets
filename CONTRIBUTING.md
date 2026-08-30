@@ -20,7 +20,7 @@ pnpm test            # `node --test` unit tests, then real Chromium windows driv
                      # extension -- expect browser popups, and a real testnet transaction
 ```
 
-`pnpm test` spends real testnet STX from the fixture wallet and waits on real blocks, so a full run is minutes, not seconds. To assert that the browser suites actually ran rather than skipped (what you want in CI), set `WALLETS_E2E_REQUIRE_EXTENSION=1` — a missing extension build then fails instead of skipping.
+`pnpm test` spends real testnet funds from the fixture wallet and waits on real blocks, so a full run is minutes, not seconds. Nothing is skipped: a missing extension build or missing deployed contracts fails the run with the command to fix it.
 
 If those don't get you to a passing test suite on a clean checkout, that's a bug in this project (or its docs) — please open an issue.
 

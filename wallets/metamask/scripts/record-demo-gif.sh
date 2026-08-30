@@ -28,7 +28,7 @@ VIDEO_DIR="$SPIKE/test-results/videos"
 rm -f "$VIDEO_DIR"/*.webm 2>/dev/null || true
 
 cd "$SPIKE"
-WALLETS_E2E_REQUIRE_EXTENSION=1 WALLETS_E2E_RECORD_DEMO=1 pnpm exec playwright test tests/demo-full-flow.spec.ts
+pnpm exec playwright test tests/demo-full-flow.spec.ts
 
 # Full-flow video is the largest recording from this single-session run.
 LATEST="$(find "$VIDEO_DIR" -name '*.webm' -type f -print0 2>/dev/null | xargs -0 ls -S 2>/dev/null | head -1)"

@@ -186,7 +186,7 @@ export interface EvmNetwork {
   name: string;
   /** Ordered RPC endpoints to try, best first. Probed for health before use — never trusted blind. */
   rpcUrls: readonly string[];
-  /** Native currency symbol the wallet's add-network form wants (e.g. `SepoliaETH`). */
+  /** Native currency symbol. EIP-3085 caps this at 6 characters — `wallet_addEthereumChain` rejects longer. */
   currencySymbol: string;
   /** Optional block explorer, for wallets whose add-network form asks for one. */
   blockExplorerUrl?: string;

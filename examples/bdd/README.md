@@ -14,10 +14,10 @@ pnpm --filter @wallets-e2e/example-bdd test # bddgen && playwright test
 
 Two scenarios run. The first connects a wallet and finishes in ~10 seconds. **The second sends a real STX transfer on real Stacks testnet** — it spends from the fixture wallet and waits for a real block, which can take ~10 minutes. It carries a `@timeout:1_200_000` tag for exactly that reason.
 
-If `wallets/leather/dist/manifest.json` doesn't exist, both scenarios **skip** rather than fail — which is what you want locally and emphatically not what you want in CI. Set `WALLETS_E2E_REQUIRE_EXTENSION=1` to turn that skip into a failure:
+If `wallets/leather/dist/manifest.json` doesn't exist the run fails with the build command — scenarios are never silently skipped:
 
 ```bash
-WALLETS_E2E_REQUIRE_EXTENSION=1 pnpm --filter @wallets-e2e/example-bdd test
+pnpm --filter @wallets-e2e/example-bdd test
 ```
 
 Requires Node >= 22.18, like the rest of the repo.

@@ -329,6 +329,21 @@ export async function ensureNetwork(context: BrowserContext, network: EvmNetwork
           `probe: ${explicitOverride}`,
       );
     }
+    if (explicitOverride && network.builtIn) {
+      await openManageNetworks(page);
+      if (network.testnet) {
+        await ensureShowTestNetworksEnabled(page);
+      }
+      if (await isNetworkListed(page, network)) {
+        await editExistingNetworkRpc(page, network, explicitOverride);
+      } else {
+        await addCustomNetwork(page, network, explicitOverride);
+      }
+      await goHome(page, extensionId);
+      pendingDappNetworks.set(context, { network });
+      return;
+    }
+
     const rpcUrl = explicitOverride || (!network.builtIn ? await resolveWorkingRpc(network) : undefined);
     pendingDappNetworks.set(context, { network, rpcUrl });
     return;
@@ -416,6 +431,13 @@ export async function applyPendingNetworkToDapp(
 
   const { network, rpcUrl } = pending;
   const chainId = chainIdToHex(network.chainId);
+  if (rpcUrl && (network.currencySymbol.length < 2 || network.currencySymbol.length > 6)) {
+    throw new Error(
+      `[wallets/metamask] switchNetwork: ${network.name} has currencySymbol ` +
+        `"${network.currencySymbol}" (${network.currencySymbol.length} characters). ` +
+        `wallet_addEthereumChain requires 2-6, and rejects anything else with code -32602.`,
+    );
+  }
   const request = rpcUrl
     ? {
         method: 'wallet_addEthereumChain',
@@ -441,24 +463,51 @@ export async function applyPendingNetworkToDapp(
     const provider = (window as unknown as {
       ethereum?: { request(value: unknown): Promise<unknown> };
     }).ethereum;
-    if (!provider) throw new Error('No injected window.ethereum provider found.');
-    return provider.request(args);
+    if (!provider) return { error: 'no injected window.ethereum provider' };
+    try {
+      await provider.request(args);
+      return {};
+    } catch (cause) {
+      const err = cause as { code?: number; message?: string };
+      return { error: `code ${err.code ?? '?'}: ${err.message ?? String(cause)}` };
+    }
   }, request);
 
-  const popup = await resolveApprovalPage(
+  const approval = resolveApprovalPage(
     context,
     extensionId,
     `${APPROVAL_SELECTORS.network}, ${APPROVAL_SELECTORS.confirmation}`,
     'switchNetwork',
+  ).then(
+    (page) => ({ page }) as const,
+    (cause: unknown) => ({ failure: cause as Error }) as const,
   );
-  assertMetaMaskPopupUrl(popup.url(), extensionId, 'switchNetwork');
-  const approve = popup
-    .locator(APPROVAL_SELECTORS.network)
-    .or(popup.getByRole('button', { name: /^(switch network|approve|confirm)$/i }))
-    .first();
-  await approve.waitFor({ state: 'visible', timeout: 30_000 });
-  await approve.click();
-  await requestPromise;
+
+  const outcome = await Promise.race([
+    approval,
+    requestPromise.then(() => ({ completed: true }) as const),
+  ]);
+
+  if ('page' in outcome) {
+    const popup = outcome.page;
+    assertMetaMaskPopupUrl(popup.url(), extensionId, 'switchNetwork');
+    const approve = popup
+      .locator(APPROVAL_SELECTORS.network)
+      .or(popup.getByRole('button', { name: /^(switch network|approve|confirm)$/i }))
+      .first();
+    await approve.waitFor({ state: 'visible', timeout: 30_000 });
+    await approve.click();
+  } else if ('failure' in outcome) {
+    throw outcome.failure;
+  }
+
+  const { error } = await requestPromise;
+  if (error) {
+    throw new Error(
+      `[wallets/metamask] switchNetwork: MetaMask rejected ${request.method} for ${network.name} ` +
+        `(${chainId}${rpcUrl ? `, RPC=${rpcUrl}` : ''}): ${error}`,
+    );
+  }
 
   const activeChainId = await dapp.evaluate(async () => {
     const provider = (window as unknown as {
