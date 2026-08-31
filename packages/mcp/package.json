@@ -1,8 +1,8 @@
 {
   "name": "@wallets-e2e/mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
-  "description": "MCP server exposing wallet E2E test runs to any MCP-capable agent: start a run, poll its status, fetch its artifacts.",
+  "description": "MCP server any coding agent can use to prove a dapp feature with a real MetaMask or Leather wallet: run the suite and get back video plus screenshots of the end-to-end transactions.",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -10,7 +10,11 @@
     "wallet",
     "e2e",
     "web3",
-    "agent"
+    "agent",
+    "claude",
+    "skill",
+    "artifacts",
+    "video"
   ],
   "license": "MIT",
   "repository": {
@@ -29,19 +33,25 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src"
+    "src",
+    "!src/**/*.test.ts"
   ],
   "engines": {
     "node": ">=22.18"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test",
     "inspect": "npx -y @modelcontextprotocol/inspector node dist/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^3.25.0"
+    "zod": "^3.25.0",
+    "@wallets-e2e/knowledge": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

@@ -35,7 +35,8 @@
     "build": "turbo run build",
     "build:leather": "pnpm --filter @wallets-e2e/leather build:extension",
     "build:metamask": "pnpm --filter @wallets-e2e/metamask build:extension",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "build:skill": "node scripts/build-claude-skill.mjs"
   },
   "devDependencies": {
     "@stacks/transactions": "^7.6.0",

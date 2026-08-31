@@ -14,11 +14,6 @@ npm install --save-dev @wallets-e2e/core @playwright/test
 
 `@playwright/test` is a peer dependency — this package uses your project's own Playwright install, not a bundled copy.
 
-Published-version note, verified 2026-08-30: npm latest is core `0.1.3`, which predates
-`createExtensionTest`, EVM helpers, and the reporting exports listed below. They describe the next
-package release represented by this README. Consumers must verify exports from the installed package
-and must not replace a missing release with repository source.
-
 ## What's exported
 
 - `launchContext({ extensionPath, userDataDir?, recordVideoDir?, headless? })` — the one place a persistent Chromium context with a wallet extension loaded gets created. Omit `recordVideoDir` and the context records nothing.
@@ -43,9 +38,14 @@ and must not replace a missing release with repository source.
 
 ## Full docs
 
-See the [package-consumer README](https://github.com/yehia67/e2e-wallets#readme) and
-[quick-start tutorial](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md) for
-installation and complete application-owned examples.
+See the [package-consumer README](https://github.com/yehia67/e2e-wallets#readme),
+[quick-start tutorial](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md), and
+[reports and artifacts](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/reports-and-artifacts.md)
+for installation and complete application-owned examples.
+
+[Core design notes](https://github.com/yehia67/e2e-wallets/blob/main/docs/core-design-notes.md) covers
+the EVM RPC endpoint policy and ban-list, why this toolkit targets real testnet rather than a local
+devnet, the architecture rules, and which artifacts Playwright owns versus this package.
 
 [Reports and artifacts](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/reports-and-artifacts.md) covers `createExtensionTest` and `withWalletReporting` in full: which artifact answers which question when a popup-driven test fails, the `video` / `screenshot` / `trace` modes and their precedence, and what to upload from CI.
 
