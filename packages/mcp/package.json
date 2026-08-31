@@ -1,8 +1,8 @@
 {
   "name": "@wallets-e2e/mcp",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
-  "description": "MCP server any coding agent can use to prove a dapp feature with a real MetaMask or Leather wallet: run the suite and get back video plus screenshots of the end-to-end transactions.",
+  "description": "Your coding agent builds the feature; a QA agent proves it with a real MetaMask or Leather wallet and hands you video plus screenshots for your demo.",
   "keywords": [
     "mcp",
     "model-context-protocol",

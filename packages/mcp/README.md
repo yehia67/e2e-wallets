@@ -1,18 +1,65 @@
 # @wallets-e2e/mcp
 
-An [MCP](https://modelcontextprotocol.io) server that any coding agent can use to **prove a dapp
-feature with a real wallet**. After the agent implements the frontend and contracts — a USDC
-deposit, a connect button, a swap, a contract call — it writes a Playwright test against the real
-MetaMask or Leather extension, runs it here, and hands the reviewer video plus screenshots of the
-actual popups and mined transactions.
+Your coding agent builds the feature. This makes it prove the feature works with a real MetaMask,
+and hands you the video for your demo.
 
-Works the same in Claude Code, Cursor, Windsurf, Zed, Continue, a Copilot agent, or your own client:
-tools only, stdio transport, hand-written JSON Schema, no dependence on client sampling, elicitation,
-or roots.
+![MetaMask driven end to end by an agent](https://raw.githubusercontent.com/yehia67/e2e-wallets/main/docs/metamask-demo-full-flow.gif)
 
-## Install
+That is a real MetaMask extension being unlocked, connected, and approving a transaction, driven by
+an agent and recorded automatically. No mocks. Leather on Stacks works the same way.
 
-Every client takes the same command/args/env shape. Config comes only from environment variables:
+## Why
+
+You tell your agent to add a USDC deposit button. It writes the code. Then what?
+
+On its own it cannot check its work against a real wallet, so it writes a test with a mocked
+provider, or runs nothing at all, and you find out during the demo.
+
+With this it writes a real Playwright test, drives the actual extension popup, waits for the
+transaction to mine, and gives you back a video of it happening.
+
+## What you get after every run
+
+A video of the whole run, showing your dapp and the wallet popup being approved. Drop it straight
+into a demo.
+
+Screenshots of every open page when something fails, including the wallet popup itself, so you see
+what the extension was showing at the moment it broke.
+
+A trace you can scrub through step by step with `npx playwright show-trace`.
+
+An HTML report holding all of it, opened with `npx playwright show-report`.
+
+Your agent gets these too. Screenshots come back to it as real images, so it can look at the wallet
+popup it just drove instead of guessing from a log.
+
+## Say this to your agent
+
+> Add a connect-wallet button, then prove it works with a real MetaMask and give me the video.
+
+It reads the guides, writes the test, runs it, and hands back the report.
+
+## Setup
+
+Get a real MetaMask build. This is the "unpacked extension" the config below asks for.
+
+```bash
+curl -L https://github.com/MetaMask/metamask-extension/releases/download/v13.13.1/metamask-chrome-13.13.1.zip -o mm.zip
+unzip -q mm.zip -d .wallet-extensions/metamask && rm mm.zip
+```
+
+Install the test packages.
+
+```bash
+npm i -D @wallets-e2e/core @wallets-e2e/metamask @playwright/test
+npx playwright install chromium
+```
+
+Make a throwaway wallet. Never use one holding funds, because runs record video of the wallet UI
+including seed entry.
+
+Point your agent at the server. Claude Code, Cursor, Windsurf, Zed and Copilot all take this same
+shape.
 
 ```json
 {
@@ -21,85 +68,85 @@ Every client takes the same command/args/env shape. Config comes only from envir
       "command": "npx",
       "args": ["-y", "@wallets-e2e/mcp"],
       "env": {
-        "WALLETS_E2E_MCP_ROOT": "/path/to/the/dapp/repo",
-        "WALLETS_E2E_SEED_PHRASE": "your throwaway test wallet",
-        "WALLETS_E2E_ETH_ADDRESS": "0x...",
-        "WALLETS_E2E_PASSWORD": "..."
+        "WALLETS_E2E_MCP_ROOT": "/absolute/path/to/your/dapp",
+        "METAMASK_EXTENSION_PATH": "/absolute/path/to/your/dapp/.wallet-extensions/metamask",
+        "WALLETS_E2E_SEED_PHRASE": "your throwaway 12 words",
+        "WALLETS_E2E_ETH_ADDRESS": "0x... matching that seed",
+        "WALLETS_E2E_PASSWORD": "any strong password"
       }
     }
   }
 }
 ```
 
-`WALLETS_E2E_MCP_ROOT` is the directory the server scans for Playwright projects. Set it to the dapp
-repository the agent is working in. It defaults to the process working directory, which is rarely
-what you want from a client.
+Everything in that `env` block is passed to the Playwright process the server starts, which is what
+your test fixture reads.
 
-The wallet variables are consumed by the suites the server runs, not by the server itself. Seed
-phrases are never tool arguments.
+## What the agent does
 
-The dapp also needs the published test packages (`@wallets-e2e/core` plus `@wallets-e2e/metamask` or
-`@wallets-e2e/leather`) and an unpacked wallet extension. See
-[`@wallets-e2e/core`](https://www.npmjs.com/package/@wallets-e2e/core).
+It reads the `feature-to-test` guide, which teaches the two rules that separate a real wallet test
+from a fake one: queue the dapp click inside the driver callback, and assert on a mined receipt
+rather than on the popup closing.
 
-## What an agent does with this
+Then it writes the test and calls `start_run`, which returns a run id immediately. A wallet suite
+takes minutes and a testnet block can take ten, far longer than a tool call may block.
 
-1. Implement the feature (UI, contracts, whatever the user asked for).
-2. `get_guide` `feature-to-test`, then the wallet guide, and write a real-extension Playwright test.
-3. `list_projects` → `start_run` (returns a `runId` immediately; a testnet tx can take ~10 minutes).
-4. Poll `get_run` until it finishes. `executed=0` is a failure, even if the process exited 0.
-5. `get_report` on **every** finished run, pass or fail. It returns the HTML report, every video and
-   screenshot path, and embeds representative screenshots so the reviewer can see the wallet UI here.
-6. Hand the video paths and HTML report to the reviewer so they can watch the end-to-end
-   transactions.
+It polls `get_run` until the run finishes, reading the executed count rather than just pass or fail.
+A suite where every test skipped still exits zero, and this reports that as an error instead of a
+pass.
 
-The same guides are also a Claude skill, shipped as [`@wallets-e2e/knowledge`](https://www.npmjs.com/package/@wallets-e2e/knowledge). Copy its `SKILL.md` and `references/` into `.claude/skills/wallets-e2e`, or let the MCP serve them via `get_guide`.
+Finally it calls `get_report` for the HTML report, the video paths and the screenshots.
+
+## Leather on Stacks
+
+Same flow. Install `@wallets-e2e/leather` instead of `@wallets-e2e/metamask`, build the Leather
+extension, and set `LEATHER_EXTENSION_PATH` to it. The guides cover STX transfers, contract calls and
+Stacks receipt polling.
 
 ## Tools
 
-| Tool | Purpose |
-|---|---|
-| `list_guides` | Catalog of how-to-write-the-test guides. Start at `feature-to-test`. |
-| `get_guide` | Full text of one guide. |
-| `list_projects` | Discovers runnable Playwright projects under the root. Returns an **id** per project. |
-| `start_run` | Starts a run, returns a `runId` **immediately**. Takes `project` (an id), optional `grep`, `testFile`, `headed`. |
-| `get_run` | State plus `executed / passed / failed / flaky / skipped` counts and the first failures. |
-| `get_report` | HTML report, videos, screenshots, traces, plus embedded screenshots for the reviewer. |
-| `get_artifact` | One artifact by path. Screenshots come back as images; videos stay as paths. |
-| `cancel_run` | Stops a run still in flight. |
+`list_guides` and `get_guide` explain how to write the test. Start at `feature-to-test`.
 
-## Why runs are asynchronous
+`list_projects` finds the Playwright projects under your root and returns an id for each. Every other
+tool takes one of those ids, never a path.
 
-A real wallet suite takes minutes; a Stacks or Sepolia block alone is ~10 minutes. That is far longer
-than an MCP tool call can block in most clients, so there is no `run_tests` tool. `start_run` returns
-a handle and the agent polls `get_run`.
+`start_run` starts a run and returns immediately. It also accepts `grep`, `testFile` and `headed`.
 
-Only one run is allowed at a time. Wallet suites drive a persistent browser profile that cannot be
-shared, and their configs pin `workers: 1`; a second concurrent run would corrupt the first.
+`get_run` reports the state plus executed, passed, failed, flaky and skipped counts, and the first
+failures.
 
-The server detects pnpm, yarn, or npm from the project's lockfile and invokes Playwright through that
-package manager.
+`get_report` returns the HTML report, videos, traces and screenshots.
 
-## Reporting honesty
+`get_artifact` returns one artifact. Screenshots come back as images.
 
-`get_run` reports `executed`, not just pass/fail. A Playwright suite in which **every test skipped
-still exits 0** — the usual cause being an unbuilt wallet extension. This server reports a run that
-executed nothing as `error`, with a note saying so, rather than letting an agent call it a success.
+`cancel_run` stops a run still in flight.
 
-A feature is not done until `get_report` has given the reviewer video and screenshots of the real
-wallet flow. A green `executed` count without artifacts is incomplete evidence.
+Only one run happens at a time, because wallet suites drive a persistent browser profile that cannot
+be shared.
 
-## Secrets and spending
+## Safety
 
-- **Seed phrases are never tool arguments.** They are read from this server's own environment, so
-  they cannot reach a model's context window or a client's request logs. No tool accepts one.
-- **Project ids, never paths.** `start_run` takes an id from `list_projects`. An absolute path or one
-  containing `..` is refused, so no argument from a model can point the runner elsewhere. `testFile`
-  and `get_artifact` are likewise confined to the chosen project / that run's attachments.
-- **Spending gates stay server-side.** Flags such as `WALLETS_E2E_RUN_SEPOLIA` are inherited from the
-  environment and are not settable per call, so no prompt injection can make an agent spend funds.
-- Test wallets only. Never point this at a wallet holding anything of value: runs record video of the
-  wallet UI, seed-phrase entry included.
+Seed phrases are never tool arguments. They are read from this server's own environment, so they
+cannot reach a model's context window or a client's logs.
+
+`start_run` takes project ids, never paths. An absolute path, or one containing `..`, is refused.
+
+Spending gates such as `WALLETS_E2E_RUN_SEPOLIA` are inherited from the environment and cannot be set
+per call, so no prompt injection can make an agent spend funds.
+
+Use test wallets only.
+
+## Also available as a Claude skill
+
+The same guides ship as [`@wallets-e2e/knowledge`](https://www.npmjs.com/package/@wallets-e2e/knowledge).
+Copy its `SKILL.md` and `references/` into `~/.claude/skills/wallets-e2e/`, or let this server serve
+them through `get_guide`.
+
+## Compatibility
+
+Tools only, stdio transport, hand-written JSON Schema, and no dependence on client sampling,
+elicitation or roots, so it behaves the same in every MCP client. The server reads your lockfile to
+decide whether to invoke Playwright through pnpm, yarn or npm.
 
 ## License
 

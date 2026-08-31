@@ -1,6 +1,6 @@
 ---
 name: wallets-e2e
-description: "Use when implementing or changing a dapp feature that talks to a browser wallet (connect, transfer, swap, USDC or ERC20 deposit, contract call, signature), when proving that feature with a real MetaMask or Leather extension in Playwright, or when a reviewer needs video and screenshot evidence of end-to-end on-chain transactions."
+description: "Use with your agentic flow for clear dapp end-to-end tests. After you build a wallet feature — connect, transfer, swap, USDC or ERC20 deposit, contract call, signature — prove it by driving the real MetaMask or Leather extension in Playwright, then hand the reviewer video and screenshots of the actual popups and on-chain transactions."
 license: MIT
 ---
 

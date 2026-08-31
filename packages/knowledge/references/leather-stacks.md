@@ -35,7 +35,7 @@ test('connects and submits a Stacks transaction', async ({ extensionContext: con
   const account = await leatherDriver.importWallet(context, seedPhrase);
   expect(account.address).toBe(expectedMainnetAddress);
 
-  await leatherDriver.switchToTestnetNetwork?.(context);
+  await leatherDriver.switchNetwork?.(context, 'testnet4');
   await leatherDriver.connectToDapp(context, async () => {
     await page.getByTestId('connect-wallet').click();
     await selectWalletInStacksConnectModal(page, 'Leather');

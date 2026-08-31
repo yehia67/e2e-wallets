@@ -282,7 +282,7 @@ test('connects Leather from npm', async ({}, testInfo) => {
     const page = await context.newPage();
     await page.goto('http://127.0.0.1:3000');
     await leatherDriver.importWallet(context, process.env.WALLETS_E2E_SEED_PHRASE ?? '');
-    await leatherDriver.switchToTestnetNetwork?.(context);
+    await leatherDriver.switchNetwork?.(context, 'testnet4');
 
     await leatherDriver.connectToDapp(context, async () => {
       await page.getByTestId('connect-wallet').click();

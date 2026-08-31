@@ -2,7 +2,7 @@
   "name": "@wallets-e2e/core",
   "version": "0.1.4",
   "type": "module",
-  "description": "Shared context-launch, extension-ID-resolution and EVM/Stacks network machinery every wallet driver in this monorepo builds on.",
+  "description": "Drive real browser-extension wallets in Playwright end-to-end tests: launches the extension-loaded context, resolves the extension ID, defines the WalletDriver port, and confirms transactions on-chain. The base for @wallets-e2e/metamask and @wallets-e2e/leather.",
   "keywords": [
     "playwright",
     "stacks",
