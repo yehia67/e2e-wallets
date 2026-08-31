@@ -1,6 +1,8 @@
 # @wallets-e2e/core
 
-Shared machinery every wallet driver in the [wallets-e2e](https://github.com/yehia67/e2e-wallets) monorepo builds on — launches the real, extension-loaded Playwright browser context, resolves the extension's runtime ID, defines the `WalletDriver` interface every wallet adapter implements, and confirms transactions on-chain via RPC.
+Public package machinery for wallet drivers and consuming dapps: launch a real extension-loaded
+Playwright context, resolve the extension runtime ID, use the shared `WalletDriver` interface, poll
+on-chain transactions, and generate reviewable reports.
 
 Part of a toolkit for driving **real** wallet browser extensions in Playwright E2E tests — real unlock, real popup approval, real signatures, real on-chain transactions. No mocking. [Leather](https://www.npmjs.com/package/@wallets-e2e/leather) (Stacks) and [MetaMask](https://www.npmjs.com/package/@wallets-e2e/metamask) (any EVM network) are the adapters built on top of this package.
 
@@ -11,6 +13,11 @@ npm install --save-dev @wallets-e2e/core @playwright/test
 ```
 
 `@playwright/test` is a peer dependency — this package uses your project's own Playwright install, not a bundled copy.
+
+Published-version note, verified 2026-08-30: npm latest is core `0.1.3`, which predates
+`createExtensionTest`, EVM helpers, and the reporting exports listed below. They describe the next
+package release represented by this README. Consumers must verify exports from the installed package
+and must not replace a missing release with repository source.
 
 ## What's exported
 
@@ -36,11 +43,11 @@ npm install --save-dev @wallets-e2e/core @playwright/test
 
 ## Full docs
 
-See the [monorepo README](https://github.com/yehia67/e2e-wallets#readme) and [quick-start tutorial](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md) for a complete, real, working example.
+See the [package-consumer README](https://github.com/yehia67/e2e-wallets#readme) and
+[quick-start tutorial](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md) for
+installation and complete application-owned examples.
 
 [Reports and artifacts](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/reports-and-artifacts.md) covers `createExtensionTest` and `withWalletReporting` in full: which artifact answers which question when a popup-driven test fails, the `video` / `screenshot` / `trace` modes and their precedence, and what to upload from CI.
-
-[Core design notes](https://github.com/yehia67/e2e-wallets/blob/main/docs/core-design-notes.md) covers the EVM RPC endpoint policy and ban-list, why this toolkit targets real testnet rather than a local devnet, and the architecture rules the package holds to.
 
 ## License
 

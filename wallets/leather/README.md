@@ -5,18 +5,35 @@
 ## Install
 
 ```bash
-npm install --save-dev @wallets-e2e/core @wallets-e2e/leather @playwright/test
+npm install --save-dev @wallets-e2e/core@0.1.3 @wallets-e2e/leather@0.1.3 @playwright/test
+npx playwright install chromium
 ```
 
 `@playwright/test` is a peer dependency — this package uses your project's own Playwright install.
 
-Before running a test, the real extension must be built from source once (idempotent):
+The npm package supplies the driver. Chromium separately needs a real unpacked Leather extension.
+Download a reviewed upstream commit archive and build it inside your dapp's gitignored
+`.wallet-extensions` directory:
 
 ```bash
-git clone --depth 1 https://github.com/leather-io/extension.git /tmp/leather-source
-cd /tmp/leather-source && pnpm install && pnpm prepare && pnpm build
-cp -R dist /path/to/your/project/wallets/leather/dist
+LEATHER_COMMIT=replace-with-reviewed-commit
+mkdir -p .wallet-extensions
+curl --fail --location \
+  "https://github.com/leather-io/extension/archive/${LEATHER_COMMIT}.zip" \
+  --output .wallet-extensions/leather.zip
+unzip -q .wallet-extensions/leather.zip -d .wallet-extensions/leather-source
+cd ".wallet-extensions/leather-source/extension-${LEATHER_COMMIT}"
+pnpm install
+pnpm prepare
+pnpm build
+cd -
+mkdir -p .wallet-extensions/leather
+cp -R ".wallet-extensions/leather-source/extension-${LEATHER_COMMIT}/dist" \
+  .wallet-extensions/leather/dist
 ```
+
+Set `LEATHER_EXTENSION_PATH=.wallet-extensions/leather/dist`, or use that path directly. Record the
+reviewed commit; do not build a moving branch in CI.
 
 ## Quick example
 
@@ -24,17 +41,19 @@ cp -R dist /path/to/your/project/wallets/leather/dist
 import { test, expect } from '@playwright/test';
 import { launchContext, selectWalletInStacksConnectModal } from '@wallets-e2e/core';
 import { leatherDriver } from '@wallets-e2e/leather';
+import { wallet } from '@wallets-e2e/leather/fixtures/wallet.js';
 
 test('connects to my dapp', async () => {
   const context = await launchContext({
-    extensionPath: 'wallets/leather/dist',
-    userDataDir: '.tmp/leather-profile',
+    extensionPath: process.env.LEATHER_EXTENSION_PATH ?? '.wallet-extensions/leather/dist',
+    userDataDir: '',
     recordVideoDir: 'test-results/videos',
   });
   const page = await context.newPage();
   await page.goto('http://localhost:3000'); // your dapp, running locally
 
-  await leatherDriver.importWallet(context, 'your twenty four word secret key');
+  await leatherDriver.importWallet(context, wallet.seedPhrase);
+  await leatherDriver.switchToTestnetNetwork?.(context);
 
   await leatherDriver.connectToDapp(context, async () => {
     await page.getByRole('button', { name: 'Connect Wallet' }).click(); // your dapp's own button
@@ -48,12 +67,15 @@ test('connects to my dapp', async () => {
 
 ## What's exported
 
-- `leatherDriver` — implements `@wallets-e2e/core`'s `WalletDriver<SupportedStacksNetwork>`: `importWallet`, `connectToDapp`, `confirmTransaction`, `switchNetwork(context, network)`.
+- `leatherDriver` — published `0.1.3` implements `importWallet`, `connectToDapp`,
+  `confirmTransaction`, and `switchToTestnetNetwork`. A later compatible package release adds the
+  typed `switchNetwork(context, network)` replacement.
 - `./fixtures/wallet.js` — a fixture wallet for testing. Reads `WALLETS_E2E_SEED_PHRASE`/`WALLETS_E2E_MAINNET_ADDRESS`/`WALLETS_E2E_TESTNET_ADDRESS`/`WALLETS_E2E_PASSWORD` from the environment first, falling back to a safe, checked-in, no-value default.
 
 ## Full docs
 
-See the [monorepo README](https://github.com/yehia67/e2e-wallets#readme) and [quick-start tutorial](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md) for signing, transferring, calling a contract, and every real gotcha this toolkit's own test suite has hit.
+See the [package-consumer quick start](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md)
+for signing, transferring, calling a contract, environment-backed fixtures, and receipt polling.
 
 ## License
 

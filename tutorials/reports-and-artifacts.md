@@ -6,11 +6,25 @@ This tutorial wires up the three artifacts that do tell you something — a **vi
 
 Two calls do it: `withWalletReporting` around your config, `createExtensionTest` for your fixture.
 
+This tutorial consumes only public package exports. Registry status verified 2026-08-30: published
+core `0.1.3` does not yet export either reporting helper, so this setup is blocked pending a core
+release. Do not replace the package with a source checkout or local link. Once a compatible release
+exists, install it in your dapp and verify the exports:
+
+```bash
+WALLETS_CORE_VERSION=replace-with-version-containing-reporting
+npm install --save-dev "@wallets-e2e/core@${WALLETS_CORE_VERSION}" @playwright/test
+node --input-type=module -e "const c=await import('@wallets-e2e/core'); for(const n of ['createExtensionTest','withWalletReporting']) if(!(n in c)) throw new Error('missing '+n)"
+```
+
 ## What you get, and who actually produces it
 
 The one genuinely surprising thing here is how little of this the package does.
 
-Extensions only load through `chromium.launchPersistentContext` — a plain `chromium.launch` cannot carry one, which is why [`launchContext`](../docs/core-design-notes.md) is the single place this monorepo creates a context (AD-1). The natural assumption is that Playwright's artifact machinery ignores a context it did not create itself. That assumption is **wrong**, and wrong in an interesting way — checked against Playwright 1.62.1 by reading its source and then watching a real run:
+Extensions only load through `chromium.launchPersistentContext` — a plain `chromium.launch` cannot
+carry one, which is why the public `launchContext` package export owns context creation. The natural
+assumption is that Playwright's artifact machinery ignores a context it did not create itself. That
+assumption is wrong — checked against Playwright 1.62.1 and a real run:
 
 | Artifact | Who produces it | How |
 |---|---|---|
@@ -30,7 +44,7 @@ Neither of them captures a trace or a screenshot. Playwright does that, and does
 ### 1. Wrap the config
 
 ```ts
-// examples/spike/playwright.config.ts
+// playwright.config.ts in your dapp
 import { defineConfig } from '@playwright/test';
 import { withWalletReporting } from '@wallets-e2e/core';
 
@@ -51,17 +65,18 @@ export default withWalletReporting(
 
 ### 2. Build the fixture
 
-**Before** — the shape every example package hand-rolled, once each. The same pattern is still printed in [`feature-files.md`](./feature-files.md):
+**Before** — the shape consumers previously hand-rolled. It is reproduced only to make the package
+factory's value clear:
 
 ```ts
-// examples/spike/tests/fixtures.ts — 34 lines
+// tests/fixtures.ts — avoid this boilerplate
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test as base, type BrowserContext } from '@playwright/test';
 import { launchContext } from '@wallets-e2e/core';
 
-export const EXTENSION_PATH = join(import.meta.dirname, '../../../wallets/leather/dist');
+export const EXTENSION_PATH = join(import.meta.dirname, '../.wallet-extensions/leather/dist');
 
 export const test = base.extend<{ extensionContext: BrowserContext }>({
   extensionContext: async ({}, use, testInfo) => {
@@ -93,27 +108,30 @@ export { expect } from '@playwright/test';
 
 Thirty-four lines, and the videos it wrote were orphans.
 
-**After** — the real file, 14 lines:
+**After** — use the public package fixture:
 
 ```ts
-// examples/spike/tests/fixtures.ts
+// tests/fixtures.ts in your dapp
 import { join } from 'node:path';
 import { createExtensionTest } from '@wallets-e2e/core';
 
-export const EXTENSION_PATH = join(import.meta.dirname, '../../../wallets/leather/dist');
+export const EXTENSION_PATH = join(import.meta.dirname, '../.wallet-extensions/leather/dist');
 
 export const test = createExtensionTest({
   extensionPath: EXTENSION_PATH,
   profilePrefix: 'wallets-e2e-spike',
   extensionName: 'Leather',
-  buildCommand: 'bash wallets/leather/scripts/build-extension.sh',
-  onMissingExtension: 'skip',
+  buildCommand: 'npm run wallet:prepare', // diagnostic text; define it in your dapp
+  onMissingExtension: 'throw',
 });
 
 export { expect } from '@playwright/test';
 ```
 
-The per-test temp profile, its cleanup, the "is it even built?" guard and the video attachment all moved into the factory. `extensionName` and `buildCommand` only shape the message you get when the extension is missing; `onMissingExtension` decides whether that message **skips** the test (`'skip'`) or **fails** it (`'throw'`, the default). `examples/metamask-spike` throws, `examples/spike` skips — a deliberate difference, not drift.
+The per-test temp profile, cleanup, build guard, and video attachment all move into the factory.
+`extensionName` and `buildCommand` only shape the missing-build message; `buildCommand` is not
+executed. `onMissingExtension` chooses skip or failure. Use the default `'throw'` in CI so a missing
+wallet cannot produce a false green result.
 
 `createExtensionTest` overrides the built-in `context` and `page` fixtures, so ordinary test code needs no new vocabulary. It also exposes `extensionContext`: the same object, under a name that reads better in a driver call.
 
@@ -122,7 +140,7 @@ The per-test temp profile, its cleanup, the "is it even built?" guard and the vi
 Pass `base`. It must be playwright-bdd's `test` — `createBdd()` inspects the test object it is handed and rejects one that does not carry playwright-bdd's own fixtures, so building on `@playwright/test`'s `test` fails at step registration rather than mysteriously at run time.
 
 ```ts
-// examples/bdd/steps/fixtures.ts
+// steps/fixtures.ts in your dapp
 import { createExtensionTest } from '@wallets-e2e/core';
 import { createWalletSteps } from '@wallets-e2e/core/bdd';
 import { leatherDriver } from '@wallets-e2e/leather';
@@ -134,7 +152,7 @@ export const test = createExtensionTest({
   extensionPath: EXTENSION_PATH,
   profilePrefix: 'wallets-e2e-bdd',
   extensionName: 'Leather',
-  buildCommand: 'pnpm build:leather',
+  buildCommand: 'npm run wallet:prepare',
 });
 
 export const { Given, When, Then } = createWalletSteps({
@@ -153,13 +171,13 @@ Overriding the built-in `context` name is what makes this work: bdd steps destru
 `createExtensionTest` returns a normal Playwright `test`, so `.extend()` it like any other:
 
 ```ts
-// examples/react-connect/tests/fixtures.ts
+// tests/fixtures.ts in your dapp
 export const test = createExtensionTest({
   extensionPath: EXTENSION_PATH,
   profilePrefix: 'wallets-e2e',
   extensionName: 'Leather',
-  buildCommand: 'bash wallets/leather/scripts/build-extension.sh',
-  onMissingExtension: 'skip',
+  buildCommand: 'npm run wallet:prepare',
+  onMissingExtension: 'throw',
 }).extend<Fixtures>({
   unlockedContext: async ({ extensionContext }, use) => {
     await leatherDriver.importWallet(extensionContext, wallet.seedPhrase);
@@ -172,8 +190,8 @@ export const test = createExtensionTest({
 ## Running and opening
 
 ```bash
-pnpm test                          # or: pnpm --filter @wallets-e2e/example-spike test
-pnpm exec playwright show-report   # opens playwright-report/index.html
+npx playwright test
+npx playwright show-report playwright-report
 ```
 
 `open: 'never'` is the default, so a run never hijacks your browser — which matters most in CI, where a report that opens itself hangs the job. Open it when you want it.
@@ -194,7 +212,7 @@ Four artifacts, four different questions. Reach for them in this order:
 The trace opens from the report's "view trace" link, or on its own:
 
 ```bash
-pnpm exec playwright show-trace test-results/<test-dir>/trace.zip
+npx playwright show-trace test-results/replace-with-test-directory/trace.zip
 ```
 
 You can also drag `trace.zip` onto [trace.playwright.dev](https://trace.playwright.dev) — it runs entirely in the browser and uploads nothing, which makes it the practical way to look at a trace a CI job produced.
@@ -279,7 +297,7 @@ The Chromium profile itself is a fresh temp directory per test (`profilePrefix` 
     name: playwright-report
     path: |
       playwright-report/
-      examples/*/playwright-report/
+      test-results/
     retention-days: 7
 ```
 
@@ -295,4 +313,3 @@ Three things worth knowing before turning everything on:
 
 - [`quick-start.md`](./quick-start.md) — the driver API these tests are written against.
 - [`feature-files.md`](./feature-files.md) — the same artifacts, driven from Gherkin scenarios.
-- [`docs/core-design-notes.md`](../docs/core-design-notes.md) — why `launchPersistentContext` lives in exactly one place, and the rest of the architecture rules.

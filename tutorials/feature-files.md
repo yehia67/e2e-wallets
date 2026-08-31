@@ -22,27 +22,33 @@ Feature: Sending STX from the demo app
     And the transaction is mined
 ```
 
-Not hypothetical — this is (lightly trimmed) `examples/bdd/features/transfer.feature`, running against `examples/react-connect`'s Vite app and the real Leather extension today. Product language only: no seed phrase, no network-switch sentence, no extension path, no popup mechanics beyond a single approval line.
+The scenario is application-owned product language: no seed phrase, network-switch implementation,
+extension path, or popup mechanics beyond a single approval sentence.
 
 ## Setup
 
 ```bash
-npm install --save-dev @wallets-e2e/core @wallets-e2e/leather @playwright/test playwright-bdd
+WALLETS_CORE_VERSION=replace-with-version-containing-createExtensionTest
+WALLETS_LEATHER_VERSION=replace-with-compatible-version
+npm install --save-dev \
+  "@wallets-e2e/core@${WALLETS_CORE_VERSION}" \
+  "@wallets-e2e/leather@${WALLETS_LEATHER_VERSION}" \
+  @playwright/test playwright-bdd
+npx playwright install chromium
 ```
+
+The replacement values are deliberately invalid. There was no published pair supporting this exact
+fixture on 2026-08-30; do not run the install until compatible versions exist.
 
 [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) is an **optional** peer of `@wallets-e2e/core`. Importing `@wallets-e2e/core` never requires it; only the `@wallets-e2e/core/bdd` subpath does.
 
 **Use `playwright-bdd`, never `@cucumber/cucumber`.** cucumber-js ships its own runner and World and cannot consume Playwright fixtures, so the extension-loaded browser context never reaches your steps.
 
-Build (or copy) the real Leather extension once, same as the quick start — then point your launch fixture at that unpacked `dist/` (see below).
-
-In this monorepo:
-
-```bash
-pnpm build:leather
-pnpm --filter @wallets-e2e/core build       # ./bdd is consumed from dist/
-pnpm --filter @wallets-e2e/example-bdd test # bddgen && playwright test
-```
+This tutorial requires public core exports `createExtensionTest` and `createWalletSteps`. Core
+`0.1.3` publishes the BDD subpath but not `createExtensionTest`, so verify both exports before using
+this exact fixture. If no published version contains both, package consumption is blocked pending a
+release; do not link repository source. Build the real Leather extension separately as described in
+the [quick start](./quick-start.md), then point the fixture at its unpacked `dist` directory.
 
 ## Wire the runner
 
@@ -86,45 +92,25 @@ export default defineConfig({
 
 ```ts
 // steps/fixtures.ts
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import type { BrowserContext, Page } from '@playwright/test';
-import { launchContext } from '@wallets-e2e/core';
+import { createExtensionTest } from '@wallets-e2e/core';
 import { createWalletSteps } from '@wallets-e2e/core/bdd';
 import { leatherDriver } from '@wallets-e2e/leather';
 import { wallet } from '@wallets-e2e/leather/fixtures/wallet.js';
-import { test as base } from 'playwright-bdd';
+import { resolve } from 'node:path';
+// `base` must be playwright-bdd's `test`: `createBdd()` rejects any test that doesn't carry its fixtures.
+import { test as bddTest } from 'playwright-bdd';
 
-const EXTENSION_PATH = 'wallets/leather/dist'; // your unpacked build
+const EXTENSION_PATH = resolve(
+  process.env.LEATHER_EXTENSION_PATH ?? '.wallet-extensions/leather/dist',
+);
 
-export const test = base.extend({
-  context: async ({}, use, testInfo) => {
-    if (!existsSync(join(EXTENSION_PATH, 'manifest.json'))) {
-      throw new Error(`Leather is not built at ${EXTENSION_PATH}. Run: pnpm build:leather`);
-    }
-
-    const userDataDir = mkdtempSync(join(tmpdir(), `wallets-e2e-${testInfo.testId}-`));
-    try {
-      const context = await launchContext({
-        extensionPath: EXTENSION_PATH,
-        userDataDir,
-        recordVideoDir: 'test-results/videos',
-      });
-      try {
-        await use(context);
-      } finally {
-        await context.close();
-      }
-    } finally {
-      rmSync(userDataDir, { recursive: true, force: true });
-    }
-  },
-
-  page: async ({ context }: { context: BrowserContext }, use: (page: Page) => Promise<void>) => {
-    const page = await context.newPage();
-    await use(page);
-  },
+// The built-in `context`/`page` are overridden here because the bdd steps read those stock names.
+export const test = createExtensionTest({
+  base: bddTest,
+  extensionPath: EXTENSION_PATH,
+  profilePrefix: 'wallets-e2e-bdd',
+  extensionName: 'Leather',
+  buildCommand: 'npm run wallet:prepare', // diagnostic text; define this in your dapp
 });
 
 export const { Given, When, Then } = createWalletSteps({
@@ -301,7 +287,7 @@ The rest of the CI shape:
 - **Cache the built extension** keyed on the pinned `leather-io/extension` commit. Building from source on every run dominates the job time.
 - **Pin that commit.** A moving `main` makes wallet UI changes arrive as mystery failures in unrelated PRs.
 - **Keep the seed in a secret**, injected as `WALLETS_E2E_SEED_PHRASE` — never a checked-in default in a real project. Video recording is on by default, so treat artifacts as sensitive if the wallet ever holds anything.
-- **Publish `.features-gen/` and videos as artifacts** on failure. A recording of the real popup is usually faster to diagnose from than a stack trace.
+- **Publish `.features-gen/` and the HTML report as artifacts** on failure. A recording of the real popup is usually faster to diagnose from than a stack trace. `createExtensionTest` attaches the video, and Playwright adds the trace and a screenshot of every open page — see [`reports-and-artifacts.md`](./reports-and-artifacts.md) for the wiring and the retention modes.
 
 ### Anti-patterns, all of them real
 
@@ -314,26 +300,19 @@ The rest of the CI shape:
 | Assert on wallet internals from a dapp step | The driver already verifies the popup's origin and clean close |
 | Let a step name outlive the product's language | A stale vocabulary is how PO review quietly stops happening |
 
-## The `examples/bdd/` folder
+## Consumer project files
 
-Full, currently-passing reference:
+Keep the complete setup in your application:
 
 | File | Role |
 |---|---|
-| `examples/bdd/features/transfer.feature` | Readable artifact |
-| `examples/bdd/steps/fixtures.ts` | Extension context + `createWalletSteps` |
-| `examples/bdd/steps/transfer.steps.ts` | Dapp-language steps only |
-| `examples/bdd/playwright.config.ts` | `defineBddConfig` + webServer → react-connect |
+| `features/transfer.feature` | Reviewable product scenario. |
+| `steps/fixtures.ts` | Package-backed extension context and wallet steps. |
+| `steps/transfer.steps.ts` | Your dapp-specific language and selectors. |
+| `playwright.config.ts` | `defineBddConfig`, application server, and artifact policy. |
 
-```bash
-pnpm --filter @wallets-e2e/example-bdd test
-```
-
-If Leather isn't built, scenarios **skip** rather than fail. For CI (or any run that must actually exercise the extension):
-
-```bash
-pnpm --filter @wallets-e2e/example-bdd test
-```
+Run `npx bddgen && npx playwright test`. A missing extension should fail in CI; a green job that
+skipped every wallet scenario is not evidence.
 
 ## Still stuck?
 

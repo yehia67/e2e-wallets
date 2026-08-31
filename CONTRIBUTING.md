@@ -1,5 +1,14 @@
 # Contributing
 
+> **Maintainer-only documentation.** This is the sole document allowed to use repository workspace
+> paths and internal build commands. User-facing READMEs, tutorials, skills, and examples must teach
+> only published `@wallets-e2e/*` package entrypoints. If a compatible release does not exist, state
+> that package consumption is blocked; never present a checkout, `workspace:*`, local link, or source
+> import as consumer setup.
+
+Before changing public documentation, validate examples against the files and exports in packed or
+installed npm artifacts rather than against unpublished TypeScript source.
+
 Thanks for considering it — this project is early and could genuinely use help, especially on wallet coverage.
 
 ## Getting set up

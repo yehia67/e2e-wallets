@@ -4,40 +4,54 @@
 
 **Honest status up front:** unlocking a wallet, connecting to a dapp, signing a message, sending a real signed STX transfer, and calling a real deployed smart contract all work today, end to end, against the real extension — confirmed on real Stacks testnet. Xverse support isn't implemented yet — see [What's not here yet](#whats-not-here-yet) below.
 
+This is strictly a **package-consumer tutorial**. Every toolkit import comes from an installed
+`@wallets-e2e/*` entrypoint. It does not require a checkout, workspace dependency, local package
+link, or toolkit source file. The first example uses the currently published `0.1.3` API.
+
 ## A real, working example
 
 ```ts
 import { test, expect } from '@playwright/test';
-import { launchContext, resolveExtensionId, selectWalletInStacksConnectModal } from '@wallets-e2e/core';
+import { launchContext, selectWalletInStacksConnectModal } from '@wallets-e2e/core';
 import { leatherDriver } from '@wallets-e2e/leather';
 import { wallet } from '@wallets-e2e/leather/fixtures/wallet.js';
 
-test('user connects and signs a message', async () => {
-  const context = await launchContext({ extensionPath: LEATHER_DIST, userDataDir, recordVideoDir });
-  const page = await context.newPage();
-  await page.goto('http://localhost:3000'); // your dapp, running locally
-
-  await leatherDriver.importWallet(context, wallet.seedPhrase);
-
-  // `trigger` is every dapp-side click needed to reach the real popup — yours to write, since
-  // only you know your dapp's buttons. `@stacks/connect`'s own wallet-picker modal (not any
-  // wallet's own UI) is handled by the shared `selectWalletInStacksConnectModal` helper.
-  await leatherDriver.connectToDapp(context, async () => {
-    await page.getByRole('button', { name: 'Connect Wallet' }).click();
-    await selectWalletInStacksConnectModal(page, 'Leather');
+test('user connects and signs a message', async ({}, testInfo) => {
+  const context = await launchContext({
+    extensionPath:
+      process.env.LEATHER_EXTENSION_PATH ?? '.wallet-extensions/leather/dist',
+    userDataDir: '',
+    recordVideoDir: testInfo.outputPath('videos'),
   });
 
-  await leatherDriver.confirmTransaction(context, async () => {
-    await page.getByRole('button', { name: 'Sign Message' }).click();
-  });
+  try {
+    const page = await context.newPage();
+    await page.goto('http://localhost:3000'); // your dapp, running locally
+    await leatherDriver.importWallet(context, wallet.seedPhrase);
+    await leatherDriver.switchToTestnetNetwork?.(context);
 
-  await expect(page.getByText(/signature/i)).toBeVisible();
+    await leatherDriver.connectToDapp(context, async () => {
+      await page.getByRole('button', { name: 'Connect Wallet' }).click();
+      await selectWalletInStacksConnectModal(page, 'Leather');
+    });
+
+    await leatherDriver.confirmTransaction(context, async () => {
+      await page.getByRole('button', { name: 'Sign Message' }).click();
+    });
+
+    await expect(page.getByText(/signature/i)).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 ```
 
-Not hypothetical — this is (lightly trimmed) the actual test in `examples/react-connect/tests/`, running against a real minimal dapp in this repo, against the real Leather extension, today. Both `examples/spike` (unlock only) and `examples/react-connect` (unlock + connect + sign) have real, passing test suites — go read them for the full, current reference rather than trusting this tutorial to stay perfectly in sync.
+The test uses only package entrypoints. The selectors and dapp URL are deliberately caller-owned:
+replace them with the stable selectors and server URL in your application.
 
 Prefer Gherkin `.feature` files so product owners can review the scenarios without reading TypeScript? That path is documented separately in [`feature-files.md`](./feature-files.md) — same real Leather extension, same popup rules, different surface.
+
+Want the video, trace and popup screenshots of a run in an HTML report? See [`reports-and-artifacts.md`](./reports-and-artifacts.md) — it covers what `createExtensionTest` attaches, what Playwright attaches itself, and the retention modes for each.
 
 ## `confirmTransaction` on its own
 
@@ -57,7 +71,10 @@ await leatherDriver.confirmTransaction(context, async () => {
 });
 ```
 
-The `trigger` callback is the only thing that changes per call — it's just "whatever your dapp does to open the next popup." `confirmTransaction` itself doesn't care what kind of approval it is, only that a real Leather popup opens, gets approved, and closes cleanly (see `examples/react-connect/tests/sign.spec.ts`'s bad-trigger test for what happens when that doesn't happen: it throws, in seconds, rather than hanging).
+The `trigger` callback is the only thing that changes per call — it is whatever your dapp does to
+open the next popup. `confirmTransaction` does not care what kind of approval it is, only that a real
+Leather popup opens, gets approved, and closes cleanly. A trigger that opens no popup fails quickly
+instead of waiting for the entire test timeout.
 
 One real wrinkle: Leather's approval button's label changes depending on what's being approved — "Sign" for a plain message, "Approve" for a real transaction. `confirmTransaction` already matches either, but if you're driving Leather's popup yourself outside this project's driver, don't hardcode "Sign".
 
@@ -74,7 +91,7 @@ import { leatherDriver } from '@wallets-e2e/leather';
 //    balance crashes Leather's own fee-estimation step outright, not gracefully. This project
 //    tried a local Clarinet devnet first and dropped it (two real, unrelated Clarinet 3.23.1
 //    bugs made it unusable); real testnet is used instead.
-await leatherDriver.switchNetwork?.(context, 'testnet4');
+await leatherDriver.switchToTestnetNetwork?.(context);
 
 await leatherDriver.confirmTransaction(context, async () => {
   await page.getByRole('button', { name: 'Send STX' }).click(); // your dapp's own trigger
@@ -103,7 +120,8 @@ const status = await waitForTransactionMined(txid, { rpcUrl: TESTNET_RPC_URL, ti
 // real testnet block times run ~10 minutes -- size your timeout accordingly, that's not a bug
 ```
 
-See `examples/react-connect/tests/transfer.spec.ts` for the full, real, passing test.
+Keep the transfer trigger and txid extraction in your dapp test; the wallet package owns only the
+popup interaction and the core package owns receipt polling.
 
 ## Calling a real smart contract
 
@@ -117,31 +135,42 @@ await request('stx_callContract', {
 });
 ```
 
-`scripts/deploy-counter-testnet.mjs` in this repo deploys a minimal example contract to real testnet from the fixture wallet; `examples/react-connect/tests/contract-call.spec.ts` is the full, real, passing test — same `confirmTransaction` call, same RPC-confirmation pattern as a transfer.
+Deploy your own test contract through the deployment tool already used by your dapp. The wallet
+package does not ship or assume a counter contract; `confirmTransaction` works with any standard
+contract call the dapp submits.
 
 ## Setup
 
 ```bash
-git clone https://github.com/yehia67/e2e-wallets.git
-cd e2e-wallets
+npm install --save-dev @wallets-e2e/core@0.1.3 @wallets-e2e/leather@0.1.3 @playwright/test
+npx playwright install chromium
+```
+
+The JavaScript APIs now come entirely from npm. Chromium still needs the real unpacked Leather
+extension. Download a reviewed upstream commit archive, build it into your application's gitignored
+extension directory, and point `extensionPath` there:
+
+```bash
+LEATHER_COMMIT=replace-with-reviewed-commit
+mkdir -p .wallet-extensions
+curl --fail --location \
+  "https://github.com/leather-io/extension/archive/${LEATHER_COMMIT}.zip" \
+  --output .wallet-extensions/leather.zip
+unzip -q .wallet-extensions/leather.zip -d .wallet-extensions/leather-source
+cd ".wallet-extensions/leather-source/extension-${LEATHER_COMMIT}"
 pnpm install
-pnpm build:leather   # builds the real Leather extension from source (idempotent)
+pnpm prepare
 pnpm build
-pnpm test            # runs every real test across every example package
+cd -
+mkdir -p .wallet-extensions/leather
+cp -R ".wallet-extensions/leather-source/extension-${LEATHER_COMMIT}/dist" \
+  .wallet-extensions/leather/dist
 ```
 
-The transfer and contract-call tests need the fixture wallet funded with real (faucet, no-value) testnet STX first — rate-limited, so it's a separate manual step, not run automatically:
-
-```bash
-node examples/react-connect/scripts/fund-fixture-wallet-testnet.mjs
-node scripts/deploy-counter-testnet.mjs   # one-time: deploys the example contract the contract-call test calls
-```
-
-```bash
-npm install --save-dev @wallets-e2e/core @wallets-e2e/leather
-```
-
-[`@wallets-e2e/core`](https://www.npmjs.com/package/@wallets-e2e/core) and [`@wallets-e2e/leather`](https://www.npmjs.com/package/@wallets-e2e/leather) are published. To exercise them the way a real npm consumer would — outside this monorepo — point a sibling project at the built packages with pnpm `link:` (see the monorepo README's install section, or a local `npm-wallet-e2e` smoke folder next to this repo). Inside this repo, examples use `"workspace:*"`.
+Set `LEATHER_EXTENSION_PATH=.wallet-extensions/leather/dist`, or rely on that default in the example.
+Building a moving upstream branch is not deterministic, so record the reviewed commit in your
+application's dependency policy. Fund the dedicated fixture address from a Stacks testnet faucet
+before opted-in transfer or contract tests; never make faucet funding part of the test itself.
 
 ## The one thing to get right in your own dapp: picking the Stacks address
 
@@ -170,9 +199,12 @@ const { getAddressFromPrivateKey } = require('@stacks/transactions');
 "
 ```
 
-`wallets/leather/fixtures/wallet.ts` in this repo shows the real pattern, including why the address it asserts against is the *mainnet*-form one — Leather's own persisted state surfaces that form, not the devnet/testnet one, which only became clear by actually inspecting a real unlocked wallet's storage rather than assuming. It also documents a real, separate gotcha: Leather enforces a minimum password-strength meter during setup — a weak password leaves its own "Continue" button permanently disabled.
-
-Prefer not writing even a throwaway seed into your own source at all? `wallet.ts` reads `WALLETS_E2E_SEED_PHRASE`/`WALLETS_E2E_MAINNET_ADDRESS`/`WALLETS_E2E_TESTNET_ADDRESS` from the environment before falling back to its checked-in default — the same pattern works for your own fixture wallet, keeping the actual phrase out of your repo entirely.
+The public `@wallets-e2e/leather/fixtures/wallet.js` export reads
+`WALLETS_E2E_SEED_PHRASE`, `WALLETS_E2E_MAINNET_ADDRESS`,
+`WALLETS_E2E_TESTNET_ADDRESS`, and `WALLETS_E2E_PASSWORD` from the environment. The mainnet-form
+address is required even when the test later switches to testnet4 because Leather's persisted
+unlocked state uses that form. Use a strong local extension password; a weak password leaves
+Leather's onboarding button disabled.
 
 ## What's not here yet
 
@@ -181,12 +213,10 @@ Prefer not writing even a throwaway seed into your own source at all? `wallet.ts
 
 Contributions on any of these are very welcome — see `CONTRIBUTING.md`.
 
-## The `examples/` folder
+## Continue with the package tutorials
 
-Everything in this tutorial is trimmed from real code — the full, currently-passing reference lives in `examples/`:
-
-- **`examples/spike/`** — the minimal proving case: load Leather, unlock it, nothing else. Start here if you just want to confirm the extension loads correctly in your environment.
-- **`examples/react-connect/`** — a real, running React dapp (`pnpm --filter @wallets-e2e/example-react-connect dev`) with Connect Wallet, Sign Message, Send STX, and Call Contract buttons, plus `tests/connect.spec.ts`, `tests/sign.spec.ts`, `tests/transfer.spec.ts`, and `tests/contract-call.spec.ts` — the fullest working reference for wiring `connectToDapp` and `confirmTransaction` into an app of your own.
-- **`examples/bdd/`** — the same react-connect dapp, driven from Gherkin `.feature` files via `@wallets-e2e/core/bdd`. See [`feature-files.md`](./feature-files.md).
-
-Run `pnpm test` from the repo root to execute every example's test suite in one go.
+- [`feature-files.md`](./feature-files.md) — consume `@wallets-e2e/core/bdd` with playwright-bdd.
+- [`reports-and-artifacts.md`](./reports-and-artifacts.md) — consume the package reporting and
+  extension fixture APIs.
+- [`@wallets-e2e/leather` on npm](https://www.npmjs.com/package/@wallets-e2e/leather) — published
+  package metadata and version history.
