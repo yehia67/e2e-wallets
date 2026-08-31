@@ -6,7 +6,7 @@
 
 This is strictly a **package-consumer tutorial**. Every toolkit import comes from an installed
 `@wallets-e2e/*` entrypoint. It does not require a checkout, workspace dependency, local package
-link, or toolkit source file. The first example uses the currently published `0.1.3` API.
+link, or toolkit source file. Everything here uses the published `0.1.4` API.
 
 ## A real, working example
 
@@ -142,7 +142,7 @@ contract call the dapp submits.
 ## Setup
 
 ```bash
-npm install --save-dev @wallets-e2e/core@0.1.3 @wallets-e2e/leather@0.1.3 @playwright/test
+npm install --save-dev @wallets-e2e/core@0.1.4 @wallets-e2e/leather@0.1.4 @playwright/test
 npx playwright install chromium
 ```
 

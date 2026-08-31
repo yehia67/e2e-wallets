@@ -5,6 +5,7 @@ Playwright fixtures for driving **real** wallet browser extensions in end-to-end
 [![@wallets-e2e/core](https://img.shields.io/npm/v/@wallets-e2e/core?label=%40wallets-e2e%2Fcore)](https://www.npmjs.com/package/@wallets-e2e/core)
 [![@wallets-e2e/leather](https://img.shields.io/npm/v/@wallets-e2e/leather?label=%40wallets-e2e%2Fleather)](https://www.npmjs.com/package/@wallets-e2e/leather)
 [![@wallets-e2e/metamask](https://img.shields.io/npm/v/@wallets-e2e/metamask?label=%40wallets-e2e%2Fmetamask)](https://www.npmjs.com/package/@wallets-e2e/metamask)
+[![@wallets-e2e/mcp](https://img.shields.io/npm/v/@wallets-e2e/mcp?label=%40wallets-e2e%2Fmcp)](https://www.npmjs.com/package/@wallets-e2e/mcp)
 [![license](https://img.shields.io/npm/l/@wallets-e2e/core)](./LICENSE)
 
 | Wallet | Package | Chains |
@@ -26,16 +27,18 @@ Install the wallet driver and core package in **your dapp repository**. Do not c
 repository to consume the library.
 
 ```bash
-npm install --save-dev @wallets-e2e/core@0.1.3 @wallets-e2e/leather@0.1.3 @playwright/test
+# Leather (Stacks)
+npm install --save-dev @wallets-e2e/core@0.1.4 @wallets-e2e/leather@0.1.4 @playwright/test
+
+# MetaMask (EVM)
+npm install --save-dev @wallets-e2e/core@0.1.4 @wallets-e2e/metamask@0.1.4 @playwright/test
+
 npx playwright install chromium
 ```
 
-Registry compatibility verified on 2026-08-30: the Leather pair above is published. Published
-MetaMask `0.1.0` imports EVM APIs absent from published core `0.1.3`, so npm MetaMask consumption is
-currently blocked pending a compatible release. Do not use a source checkout as a hidden fallback.
-Before installing MetaMask, verify that the latest core exports `EVM_NETWORKS`,
-`createInjectedEvmRpc`, and `waitForEthTransactionMined`, then install the mutually compatible
-published versions.
+`core`, `leather` and `metamask` at `0.1.4` are a verified compatible set — every example suite in
+this repository passes against them installed from the registry. Do not use a source checkout as a
+hidden fallback.
 
 ## Use it
 
@@ -171,9 +174,6 @@ official extension download and the package-only fixture.
 
 A wallet test fails inside a popup that has already closed. Two calls put every result in an HTML report, with a video and screenshot of **every** open page — the dapp *and* the wallet's own popup — for passed and failed tests. Failures also retain a trace.
 
-These reporting exports are not present in published core `0.1.3`; use this section only after a
-compatible core package is published and verified. Do not substitute local source.
-
 ```ts
 // playwright.config.ts
 import { defineConfig } from '@playwright/test';
@@ -227,15 +227,39 @@ code is not presented as an installation route.
 
 ## Using this with an AI coding agent
 
-[`claude-skill/wallets-e2e/`](./claude-skill/wallets-e2e/) is a portable agent skill covering real MetaMask and Leather dapp flows, arbitrary standard smart-contract interactions, live-chain verification, BDD, debugging, and HTML reports with videos and success/failure screenshots. Claude Code discovers it from `.claude/skills`; other agentic systems can consume the same `SKILL.md` and focused references using their own skill/import convention.
+Point any MCP-capable agent at [`@wallets-e2e/mcp`](https://www.npmjs.com/package/@wallets-e2e/mcp).
+After it implements a wallet-touching feature — a USDC deposit, a connect button, a swap — it writes
+a real-extension Playwright test, runs it through the MCP, and hands back video plus screenshots of
+the actual wallet popups and mined transactions.
 
-Copy it into a Claude Code project:
-
-```bash
-cp -R claude-skill/wallets-e2e ~/your-project/.claude/skills/wallets-e2e
+```json
+{
+  "mcpServers": {
+    "wallets-e2e": {
+      "command": "npx",
+      "args": ["-y", "@wallets-e2e/mcp"],
+      "env": {
+        "WALLETS_E2E_MCP_ROOT": "/path/to/your/dapp",
+        "WALLETS_E2E_SEED_PHRASE": "your throwaway test wallet",
+        "WALLETS_E2E_ETH_ADDRESS": "0x...",
+        "WALLETS_E2E_PASSWORD": "..."
+      }
+    }
+  }
+}
 ```
 
-An MCP server is planned, not built yet.
+The same guides the MCP serves are a Claude skill, shipped in
+[`@wallets-e2e/knowledge`](https://www.npmjs.com/package/@wallets-e2e/knowledge):
+
+```bash
+npm install -D @wallets-e2e/knowledge
+mkdir -p .claude/skills/wallets-e2e
+cp node_modules/@wallets-e2e/knowledge/SKILL.md .claude/skills/wallets-e2e/
+cp -R node_modules/@wallets-e2e/knowledge/references .claude/skills/wallets-e2e/
+```
+
+Agents that already have the MCP connected can skip the skill copy and call `get_guide` instead.
 
 ## Contributing
 

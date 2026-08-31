@@ -1,9 +1,18 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { resolveProject, type TestProject } from './projects.js';
+import {
+  assertSafeTestFile,
+  classifyArtifact,
+  detectPlaywrightLauncher,
+  type ArtifactKind,
+} from './launcher.js';
+
+export type { ArtifactKind, PackageManager, PlaywrightLauncher } from './launcher.js';
+export { assertSafeTestFile, classifyArtifact, detectPlaywrightLauncher } from './launcher.js';
 
 export type RunState = 'running' | 'passed' | 'failed' | 'error' | 'cancelled';
 
@@ -27,12 +36,14 @@ export interface Run {
   failures: Array<{ title: string; error: string }>;
   jsonPath: string;
   reportDir: string;
+  openReport: string;
   stderrTail: string[];
   child?: ChildProcess;
 }
 
 const runs = new Map<string, Run>();
 const MAX_STDERR_LINES = 40;
+export const MAX_EMBED_BYTES = 1.5 * 1024 * 1024;
 
 export function activeRun(): Run | undefined {
   return [...runs.values()].find((run) => run.state === 'running');
@@ -78,10 +89,11 @@ export function startRun(options: StartRunOptions): Run {
 
   const project: TestProject = resolveProject(options.projectId);
   const jsonPath = join(mkdtempSync(join(tmpdir(), 'wallets-e2e-mcp-')), 'results.json');
+  const launcher = detectPlaywrightLauncher(project.dir);
 
-  const args = ['exec', 'playwright', 'test', '--reporter=list,html,json'];
+  const args = [...launcher.testArgs, '--reporter=list,html,json'];
   if (options.grep) args.push('--grep', options.grep);
-  if (options.testFile) args.push(options.testFile);
+  if (options.testFile) args.push(assertSafeTestFile(options.testFile, project.dir));
   if (options.headed) args.push('--headed');
 
   const run: Run = {
@@ -93,11 +105,12 @@ export function startRun(options: StartRunOptions): Run {
     failures: [],
     jsonPath,
     reportDir: join(project.dir, 'playwright-report'),
+    openReport: launcher.openReport,
     stderrTail: [],
   };
 
   // No shell: args are passed as an array, so nothing in them can be interpreted as a command.
-  const child = spawn('pnpm', args, {
+  const child = spawn(launcher.command, args, {
     cwd: project.dir,
     env: runnerEnv(jsonPath),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -210,6 +223,7 @@ export interface RunArtifact {
   contentType: string;
   path: string;
   exists: boolean;
+  kind: ArtifactKind;
 }
 
 export function runArtifacts(run: Run): RunArtifact[] {
@@ -229,11 +243,14 @@ export function runArtifacts(run: Run): RunArtifact[] {
           for (const attachment of (result.attachments as Array<Record<string, unknown>>) ?? []) {
             const path = typeof attachment.path === 'string' ? attachment.path : '';
             if (!path) continue;
+            const name = String(attachment.name ?? 'attachment');
+            const contentType = String(attachment.contentType ?? 'application/octet-stream');
             artifacts.push({
-              name: String(attachment.name ?? 'attachment'),
-              contentType: String(attachment.contentType ?? 'application/octet-stream'),
+              name,
+              contentType,
               path,
               exists: existsSync(path),
+              kind: classifyArtifact(name, contentType, path),
             });
           }
         }
@@ -244,6 +261,76 @@ export function runArtifacts(run: Run): RunArtifact[] {
 
   for (const suite of (report as { suites?: Array<Record<string, unknown>> }).suites ?? []) visit(suite);
   return artifacts;
+}
+
+export interface EmbeddedImage {
+  name: string;
+  path: string;
+  mimeType: string;
+  data: string;
+}
+
+function mimeFor(artifact: RunArtifact): string {
+  if (artifact.contentType.startsWith('image/')) return artifact.contentType;
+  if (artifact.path.toLowerCase().endsWith('.jpg') || artifact.path.toLowerCase().endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+  if (artifact.path.toLowerCase().endsWith('.webp')) return 'image/webp';
+  if (artifact.path.toLowerCase().endsWith('.gif')) return 'image/gif';
+  return 'image/png';
+}
+
+function embedImage(artifact: RunArtifact): EmbeddedImage | undefined {
+  if (!artifact.exists || artifact.kind !== 'screenshot') return undefined;
+  let size: number;
+  try {
+    size = statSync(artifact.path).size;
+  } catch {
+    return undefined;
+  }
+  if (size === 0 || size > MAX_EMBED_BYTES) return undefined;
+  return {
+    name: artifact.name,
+    path: artifact.path,
+    mimeType: mimeFor(artifact),
+    data: readFileSync(artifact.path).toString('base64'),
+  };
+}
+
+/** Prefer failure and wallet-popup frames so a reviewer sees the transaction UI first. */
+export function reviewScreenshots(run: Run, limit = 4): EmbeddedImage[] {
+  const shots = runArtifacts(run).filter((artifact) => artifact.kind === 'screenshot' && artifact.exists);
+  const rank = (artifact: RunArtifact): number => {
+    const hay = `${artifact.name} ${artifact.path}`.toLowerCase();
+    if (hay.includes('failed') || hay.includes('error')) return 0;
+    if (hay.includes('wallet') || hay.includes('popup') || hay.includes('extension')) return 1;
+    return 2;
+  };
+  const picked: EmbeddedImage[] = [];
+  for (const artifact of [...shots].sort((a, b) => rank(a) - rank(b))) {
+    const image = embedImage(artifact);
+    if (!image) continue;
+    picked.push(image);
+    if (picked.length >= limit) break;
+  }
+  return picked;
+}
+
+export function readRunArtifact(run: Run, requestedPath: string): {
+  artifact: RunArtifact;
+  image?: EmbeddedImage;
+} {
+  const wanted = resolve(requestedPath);
+  const artifact = runArtifacts(run).find((candidate) => resolve(candidate.path) === wanted);
+  if (!artifact) {
+    throw new Error(
+      `No artifact at "${requestedPath}" for run ${run.runId}. Pass a path from get_report.`,
+    );
+  }
+  if (!artifact.exists) {
+    throw new Error(`Artifact "${artifact.path}" was listed but is missing on disk.`);
+  }
+  return { artifact, image: embedImage(artifact) };
 }
 
 export function cancelRun(runId: string): Run {

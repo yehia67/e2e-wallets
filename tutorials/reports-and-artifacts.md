@@ -6,15 +6,10 @@ This tutorial wires up the three artifacts that do tell you something — a **vi
 
 Two calls do it: `withWalletReporting` around your config, `createExtensionTest` for your fixture.
 
-This tutorial consumes only public package exports. Registry status verified 2026-08-30: published
-core `0.1.3` does not yet export either reporting helper, so this setup is blocked pending a core
-release. Do not replace the package with a source checkout or local link. Once a compatible release
-exists, install it in your dapp and verify the exports:
+This tutorial consumes only public package exports. Both helpers ship in `@wallets-e2e/core@0.1.4`:
 
 ```bash
-WALLETS_CORE_VERSION=replace-with-version-containing-reporting
-npm install --save-dev "@wallets-e2e/core@${WALLETS_CORE_VERSION}" @playwright/test
-node --input-type=module -e "const c=await import('@wallets-e2e/core'); for(const n of ['createExtensionTest','withWalletReporting']) if(!(n in c)) throw new Error('missing '+n)"
+npm install --save-dev @wallets-e2e/core@0.1.4 @playwright/test
 ```
 
 ## What you get, and who actually produces it

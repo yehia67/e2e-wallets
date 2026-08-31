@@ -28,27 +28,20 @@ extension path, or popup mechanics beyond a single approval sentence.
 ## Setup
 
 ```bash
-WALLETS_CORE_VERSION=replace-with-version-containing-createExtensionTest
-WALLETS_LEATHER_VERSION=replace-with-compatible-version
 npm install --save-dev \
-  "@wallets-e2e/core@${WALLETS_CORE_VERSION}" \
-  "@wallets-e2e/leather@${WALLETS_LEATHER_VERSION}" \
+  @wallets-e2e/core@0.1.4 \
+  @wallets-e2e/leather@0.1.4 \
   @playwright/test playwright-bdd
 npx playwright install chromium
 ```
-
-The replacement values are deliberately invalid. There was no published pair supporting this exact
-fixture on 2026-08-30; do not run the install until compatible versions exist.
 
 [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) is an **optional** peer of `@wallets-e2e/core`. Importing `@wallets-e2e/core` never requires it; only the `@wallets-e2e/core/bdd` subpath does.
 
 **Use `playwright-bdd`, never `@cucumber/cucumber`.** cucumber-js ships its own runner and World and cannot consume Playwright fixtures, so the extension-loaded browser context never reaches your steps.
 
-This tutorial requires public core exports `createExtensionTest` and `createWalletSteps`. Core
-`0.1.3` publishes the BDD subpath but not `createExtensionTest`, so verify both exports before using
-this exact fixture. If no published version contains both, package consumption is blocked pending a
-release; do not link repository source. Build the real Leather extension separately as described in
-the [quick start](./quick-start.md), then point the fixture at its unpacked `dist` directory.
+`createExtensionTest` and `createWalletSteps` both ship in `0.1.4`. Build the real Leather extension
+separately as described in the [quick start](./quick-start.md), then point the fixture at its
+unpacked `dist` directory.
 
 ## Wire the runner
 

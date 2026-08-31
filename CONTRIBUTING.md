@@ -52,6 +52,31 @@ Every wallet extension this project supports is driven the same way, through one
   ```
   `wallets/leather` is the reference implementation — read `wallets/leather/src/index.ts` before writing a new one. It's commented with exactly which parts were verified against the real extension's UI (button test-IDs, screen order, timing gotchas) versus which parts are structural. `wallets/metamask` is the second adapter — the pinned official MetaMask 13.13.1 production extension, driving **any** EVM network: `switchNetwork(context, network)` keeps built-in providers intact and validates custom networks or explicit RPC overrides before adding them.
 - **`examples/spike`** holds the actual Playwright tests that exercise a driver end to end. **`examples/react-connect`** is a real dapp with a real `@stacks/connect` integration, and **`examples/bdd`** drives that same dapp from Gherkin `.feature` files through the step library in `packages/core/src/bdd/`.
+- **`packages/knowledge`** is the single source of truth for agent guides (`SKILL.md` + `references/`). `@wallets-e2e/mcp` serves them via `list_guides` / `get_guide`. `pnpm build:skill` copies them into `claude-skill/wallets-e2e/` and writes `claude-skill/wallets-e2e-skill-upload.zip` for Claude skill upload. Do not edit the generated copy.
+- **`packages/mcp`** is the MCP server any agent uses to run a consuming project's Playwright suite and collect video / screenshot artifacts.
+
+## Publishing knowledge and MCP
+
+Publish **knowledge first**, then MCP. MCP depends on `@wallets-e2e/knowledge`; `pnpm publish` rewrites the workspace specifier to the version on disk. If knowledge is not on the registry yet, `npx @wallets-e2e/mcp` will fail to install.
+
+```bash
+pnpm --filter @wallets-e2e/knowledge build
+pnpm --filter @wallets-e2e/knowledge test
+pnpm --filter @wallets-e2e/knowledge publish --access public
+
+pnpm --filter @wallets-e2e/mcp build
+pnpm --filter @wallets-e2e/mcp test
+pnpm --filter @wallets-e2e/mcp publish --access public
+```
+
+To run the MCP from this checkout while iterating (not a consumer install path):
+
+```bash
+pnpm --filter @wallets-e2e/knowledge build
+pnpm --filter @wallets-e2e/mcp build
+# client command: node, args: ["/absolute/path/to/packages/mcp/dist/index.js"]
+pnpm --filter @wallets-e2e/mcp inspect
+```
 
 ## Adding a new wallet adapter
 

@@ -56,8 +56,8 @@ export function discoverProjects(root = projectsRoot(), maxDepth = 3): TestProje
   return found.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function resolveProject(id: string): TestProject {
-  const projects = discoverProjects();
+export function resolveProject(id: string, root = projectsRoot()): TestProject {
+  const projects = discoverProjects(root);
   const match = projects.find((project) => project.id === id);
   if (match) return match;
 
