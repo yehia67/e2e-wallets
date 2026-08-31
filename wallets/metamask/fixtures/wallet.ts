@@ -37,16 +37,26 @@ function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(
-      `[wallets/metamask] ${name} is not set. ` +
-        `Run: node wallets/metamask/scripts/generate-fixture-wallet.mjs ` +
-        `then export WALLETS_E2E_* vars (or rely on auto-loaded .env.local)`,
+      `[wallets/metamask] ${name} is not set. Generate a throwaway wallet and export ` +
+        `WALLETS_E2E_SEED_PHRASE, WALLETS_E2E_ETH_ADDRESS and WALLETS_E2E_PASSWORD ` +
+        `(a .env.local beside your tests is auto-loaded).`,
     );
   }
   return value;
 }
 
+/**
+ * Getters, not values: `src/onboarding.ts` imports this module, so eager reads would make
+ * `import '@wallets-e2e/metamask'` throw for any consumer without the env set — before a test runs.
+ */
 export const wallet = {
-  seedPhrase: requireEnv('WALLETS_E2E_SEED_PHRASE'),
-  address: requireEnv('WALLETS_E2E_ETH_ADDRESS'),
-  password: requireEnv('WALLETS_E2E_PASSWORD'),
+  get seedPhrase(): string {
+    return requireEnv('WALLETS_E2E_SEED_PHRASE');
+  },
+  get address(): string {
+    return requireEnv('WALLETS_E2E_ETH_ADDRESS');
+  },
+  get password(): string {
+    return requireEnv('WALLETS_E2E_PASSWORD');
+  },
 };

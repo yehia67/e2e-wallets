@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/metamask",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "WalletDriver adapter for the pinned official MetaMask 13.13.1 production extension, for any EVM network.",
   "keywords": [
@@ -47,7 +47,7 @@
     "build:extension": "bash ./scripts/build-extension.sh"
   },
   "dependencies": {
-    "@wallets-e2e/core": "workspace:*"
+    "@wallets-e2e/core": "workspace:^"
   },
   "peerDependencies": {
     "@playwright/test": "^1.47.0"
