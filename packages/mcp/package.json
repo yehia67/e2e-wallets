@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/mcp",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "type": "module",
   "description": "MCP server exposing wallet E2E test runs to any MCP-capable agent: start a run, poll its status, fetch its artifacts.",
   "keywords": [

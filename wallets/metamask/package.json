@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/metamask",
-  "version": "0.2.0",
+  "version": "0.1.4",
   "type": "module",
   "description": "WalletDriver adapter for the pinned official MetaMask 13.13.1 production extension, for any EVM network.",
   "keywords": [

@@ -8,6 +8,7 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { discoverProjects, projectsRoot } from './projects.js';
 import {
   activeRun,
@@ -19,7 +20,9 @@ import {
   type Run,
 } from './runs.js';
 
-const VERSION = '0.1.0';
+// Read at runtime so the version a client displays can never drift from the published package.
+const require = createRequire(import.meta.url);
+const VERSION = (require('../package.json') as { version: string }).version;
 
 /**
  * Schemas are hand-written JSON Schema rather than generated, and stay flat: no top-level

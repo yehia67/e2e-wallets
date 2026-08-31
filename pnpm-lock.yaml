@@ -199,7 +199,7 @@ importers:
   wallets/leather:
     dependencies:
       '@wallets-e2e/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/core
     devDependencies:
       '@playwright/test':
@@ -218,7 +218,7 @@ importers:
   wallets/metamask:
     dependencies:
       '@wallets-e2e/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/core
     devDependencies:
       '@playwright/test':

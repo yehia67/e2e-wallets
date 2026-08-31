@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/leather",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "WalletDriver adapter for the real Leather browser extension, built from source (leather-io/extension).",
   "keywords": [
@@ -47,7 +47,7 @@
     "build:extension": "bash ./scripts/build-extension.sh"
   },
   "dependencies": {
-    "@wallets-e2e/core": "workspace:*"
+    "@wallets-e2e/core": "workspace:^"
   },
   "peerDependencies": {
     "@playwright/test": "^1.47.0"
