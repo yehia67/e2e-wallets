@@ -191,7 +191,9 @@ npx playwright show-report playwright-report
 
 `open: 'never'` is the default, so a run never hijacks your browser — which matters most in CI, where a report that opens itself hangs the job. Open it when you want it.
 
-Each test in the report carries its own attachments. The first video is attached under the name `video`, which is the name the HTML reporter special-cases into an actual player; the rest are named after what they show — `video-wallet-approval` for a wallet's approval window, `video-wallet` for its other pages — and numbered when a run produces more than one of a kind. Recordings of pages that never showed anything are dropped instead of attached, so you never open a blank player looking for the wallet.
+Each test in the report carries its own attachments. The first video is attached under the name `video`, which is the name the HTML reporter special-cases into an actual player; the rest are named after what they show — `video-wallet-approval` for a wallet's approval window, `video-wallet` for its other pages — and numbered when a run produces more than one of a kind. Recordings of pages that never showed anything are dropped instead of attached, and the wallet's idle home page is dropped too unless it is the only recording, so you never open a blank player looking for the wallet.
+
+Screenshots work the same way, and for a reason worth knowing: Playwright captures every page in the context the instant a test body ends, which is before any fixture can filter, and an extension context holds pages nobody wants to see — the initial `about:blank`, and a wallet's invisible worker pages like MetaMask's `offscreen.html`. `withWalletReporting` therefore turns Playwright's own screenshots off and the fixture takes them itself, of the visible pages only, named `screenshot`, `screenshot-wallet-approval`, `screenshot-wallet`. A `use.screenshot` you set is carried over to that capture rather than dropped.
 
 ## Reading a failure
 

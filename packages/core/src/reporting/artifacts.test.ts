@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 // Explicit `.ts` extension: run straight from source by `node --test`, excluded from the build.
 import {
   DEFAULT_ARTIFACT_MODES,
+  WALLET_SCREENSHOT_USE_KEY,
   resolveArtifactMode,
   shouldRetainArtifact,
   walletReporters,
@@ -94,12 +95,25 @@ describe('walletReporters', () => {
 });
 
 describe('withWalletReporting', () => {
-  it('injects the reporter and all three artifact modes into a bare config', () => {
+  it('injects the reporter and the artifact modes into a bare config', () => {
     const config = withWalletReporting({ testDir: './tests' });
     assert.deepEqual(config.reporter, walletReporters());
     assert.equal(config.use?.video, DEFAULT_ARTIFACT_MODES.video);
-    assert.equal(config.use?.screenshot, DEFAULT_ARTIFACT_MODES.screenshot);
     assert.equal(config.use?.trace, DEFAULT_ARTIFACT_MODES.trace);
+  });
+
+  it("turns Playwright's own screenshots off, because the fixture takes them instead", () => {
+    const config = withWalletReporting({ testDir: './tests' });
+    assert.equal(config.use?.screenshot, 'off');
+  });
+
+  it('carries a caller-supplied screenshot mode over to the fixture', () => {
+    const config = withWalletReporting({ use: { screenshot: 'only-on-failure' } });
+    assert.equal(config.use?.screenshot, 'off');
+    assert.equal(
+      (config.use as Record<string, unknown>)[WALLET_SCREENSHOT_USE_KEY],
+      'only-on-failure',
+    );
   });
 
   it('leaves a caller-supplied reporter completely alone', () => {
@@ -110,7 +124,6 @@ describe('withWalletReporting', () => {
   it('leaves a caller-supplied artifact mode alone while filling in the others', () => {
     const config = withWalletReporting({ use: { video: 'off' } });
     assert.equal(config.use?.video, 'off');
-    assert.equal(config.use?.screenshot, DEFAULT_ARTIFACT_MODES.screenshot);
     assert.equal(config.use?.trace, DEFAULT_ARTIFACT_MODES.trace);
   });
 

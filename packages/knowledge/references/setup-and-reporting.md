@@ -139,23 +139,43 @@ export default withWalletReporting(
 
 `withWalletReporting` adds the list reporter plus an unfiltered HTML reporter at
 `playwright-report/index.html`. Passed, failed, skipped, and timed-out cases all appear. It fills only
-undefined settings; caller-provided `reporter`, `use.video`, `use.screenshot`, or `use.trace` wins.
+undefined settings; caller-provided `reporter`, `use.video`, or `use.trace` wins.
 
 Package defaults:
 
 | Setting | Default | Result |
 |---|---|---|
 | `use.video` | `'on'` | Record and attach videos for passed and failed tests. |
-| `use.screenshot` | `'on'` | Capture every open page on passed and failed tests. |
+| `use.screenshot` | forced `'off'` | The fixture takes screenshots instead — see below. |
 | `use.trace` | `'retain-on-failure'` | Record traces, retain them only for unexpected failures. |
 
-Override them in `use` when storage policy requires it. The fixture also accepts
-`artifacts: { video: ... }`; trace and screenshot remain ordinary Playwright `use` options.
+Override video and trace in `use` when storage policy requires it. The fixture also accepts
+`artifacts: { video: ..., screenshot: ... }`; trace remains an ordinary Playwright `use` option.
 
-Persistent contexts can record several pages. The package attaches useful HTTP(S) dapp recordings
-first, wallet extension pages next, and other non-blank pages after those; recordings of pages that
-never showed anything — the persistent context's initial `about:blank`, and any page whose URL never
-resolved — are discarded rather than attached, so the report holds no blank players.
+### Screenshots are the fixture's, not Playwright's
+
+Playwright screenshots **every page in the context the moment a test body ends** — before any
+fixture can filter — and an extension context holds pages nobody wants to look at: the persistent
+context's initial `about:blank`, and a wallet's invisible worker pages such as MetaMask's
+`offscreen.html`. Each one costs a blank image in the report.
+
+So `withWalletReporting` sets `use.screenshot` to `'off'` and the fixture captures its own, while
+the pages are still open, skipping the ones that show nothing. A caller's `use.screenshot` is not
+ignored: it is carried over as the fixture's mode, so `'only-on-failure'` still means only on
+failure. `artifacts: { screenshot: ... }` beats both.
+
+Screenshots are named like recordings: `screenshot`, then `screenshot-wallet-approval` and
+`screenshot-wallet`, numbered when there is more than one of a kind.
+
+Persistent contexts also record one video per page. The `page` fixture takes over the context's
+initial blank page rather than opening a second one, and recordings of pages that showed nothing —
+blank pages and invisible worker pages alike — are discarded instead of attached.
+
+The package attaches useful HTTP(S) dapp recordings first, wallet extension pages next, and other
+non-blank pages after those. The wallet's home page is open for the whole run and idle for nearly
+all of it, so its recording is dropped unless it is the only one — pass
+`artifacts: { walletHomeVideo: true }` to keep it. Its screenshot is kept either way: one still of
+where the wallet ended up is worth having.
 
 Each attachment is named after what it shows: `video` for the first kept recording, which is the
 name Playwright's HTML reporter special-cases into a player, then `video-wallet-approval` for a

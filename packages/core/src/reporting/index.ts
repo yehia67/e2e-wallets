@@ -18,14 +18,22 @@ import {
   DEFAULT_ARTIFACT_MODES,
   resolveArtifactMode,
   shouldRetainArtifact,
+  WALLET_SCREENSHOT_USE_KEY,
   type ArtifactMode,
   type WalletArtifactOptions,
 } from './artifacts.js';
-import { nameVideoEntries } from './video-names.js';
+import { isNonVisualPageUrl, nameScreenshotEntries, nameVideoEntries } from './video-names.js';
 import { orderVideoEntriesForAttachment } from './video-order.js';
 
 export * from './artifacts.js';
-export { nameVideoEntries, type VideoAttachmentName, type VideoRole } from './video-names.js';
+export {
+  isNonVisualPageUrl,
+  nameScreenshotEntries,
+  nameVideoEntries,
+  type NameVideoOptions,
+  type VideoAttachmentName,
+  type VideoRole,
+} from './video-names.js';
 
 /** Extra fixture `createExtensionTest` adds on top of whatever base it was given. */
 export interface ExtensionFixtures {
@@ -84,7 +92,11 @@ export function createExtensionTest<
     // hand-launched persistent contexts as much as for its own. Restated here so the package
     // defaults apply without `withWalletReporting`; `use.trace`/`use.screenshot` still override.
     trace: [DEFAULT_ARTIFACT_MODES.trace, { option: true, scope: 'worker', box: true }],
-    screenshot: [DEFAULT_ARTIFACT_MODES.screenshot, { option: true, scope: 'worker', box: true }],
+    // Playwright screenshots every page in the context as soon as the test body ends — before any
+    // fixture can filter — which in an extension context means the wallet's invisible worker pages
+    // too. The package takes its own instead, of the pages worth looking at; `artifacts.screenshot`
+    // and `use.screenshot` still choose when.
+    screenshot: ['off', { option: true, scope: 'worker', box: true }],
 
     // The built-in `context` name is overridden so bdd steps that read the stock `context`/`page`
     // drive an extension context without knowing about extensions.
@@ -111,13 +123,17 @@ export function createExtensionTest<
         try {
           await use(context);
         } finally {
-          // Order is load-bearing: closing flushes the video and lets Playwright take its own artifacts.
+          // Taken before anything closes, while the pages are still on screen.
+          await attachScreenshots(context, testInfo, resolveScreenshotMode(artifacts, testInfo));
+          // Order is load-bearing: Playwright screenshots the context's pages as it closes, and
+          // closing flushes the videos. Blank pages go first so they reach neither artifact.
+          await closeNonVisualPages(context);
           try {
             await context.close();
           } catch {
             // A crashed browser can reject close(); attachVideos must still run.
           }
-          await attachVideos(videos, videoDir, testInfo, videoMode);
+          await attachVideos(videos, videoDir, testInfo, videoMode, artifacts);
         }
       } finally {
         rmSync(userDataDir, { recursive: true, force: true });
@@ -128,7 +144,13 @@ export function createExtensionTest<
       { context }: { context: BrowserContext },
       use: (page: Page) => Promise<void>,
     ) => {
-      const page = await context.newPage();
+      // A persistent context opens with a blank page. Taking that one over,
+      // rather than adding a second, keeps the run free of a page that shows
+      // nothing: Playwright screenshots every page in the context when a test
+      // ends, and records one video per page, so a leftover blank page costs a
+      // blank image and a blank player in every report.
+      const existing = context.pages().find((candidate) => isNonVisualPageUrl(candidate.url()));
+      const page = existing ?? (await context.newPage());
       await use(page);
     },
 
@@ -141,6 +163,24 @@ export function createExtensionTest<
     // Playwright's `extend` cannot see that we are overriding two of its own fixtures with
     // compatible ones; the cast keeps the public signature honest without loosening it.
   } as never) as TestType<TArgs & ExtensionFixtures, TWorkerArgs>;
+}
+
+
+/**
+ * Closes the pages that show nothing, before the context takes its artifacts.
+ *
+ * A persistent context opens with `about:blank`, and a wallet extension keeps invisible worker
+ * pages such as MetaMask's `offscreen.html` open for the whole run. Playwright screenshots every
+ * page in the context when a test ends and records one video per page, so each of these costs a
+ * blank image and a blank player in the report.
+ */
+async function closeNonVisualPages(context: BrowserContext): Promise<void> {
+  await Promise.all(
+    context
+      .pages()
+      .filter((page) => !page.isClosed() && isNonVisualPageUrl(page.url()))
+      .map((page) => page.close().catch(() => undefined)),
+  );
 }
 
 function requireExtensionBuild(args: {
@@ -167,6 +207,69 @@ function requireExtensionBuild(args: {
 function resolveVideoMode(artifacts: WalletArtifactOptions, testInfo: TestInfo): ArtifactMode {
   const projectUse = (testInfo.project.use ?? {}) as Record<string, unknown>;
   return resolveArtifactMode(artifacts.video, projectUse.video, DEFAULT_ARTIFACT_MODES.video);
+}
+
+function resolveScreenshotMode(artifacts: WalletArtifactOptions, testInfo: TestInfo): ArtifactMode {
+  const projectUse = (testInfo.project.use ?? {}) as Record<string, unknown>;
+  // `use.screenshot` itself is forced to 'off' by `withWalletReporting`, which parks the caller's
+  // choice under its own key; a config that skipped that helper is read directly.
+  return resolveArtifactMode(
+    artifacts.screenshot,
+    projectUse[WALLET_SCREENSHOT_USE_KEY] ?? projectUse.screenshot,
+    DEFAULT_ARTIFACT_MODES.screenshot,
+  );
+}
+
+/**
+ * Screenshots the pages worth looking at, named for what they show.
+ *
+ * Runs while the context is still open, so every page is captured as it stood at the end of the
+ * test; pages that show nothing are skipped rather than contributing a blank image.
+ */
+
+/**
+ * Artifact collection swallows its own failures so it can never mask a test's real result, which
+ * also means a missing screenshot or video looks exactly like one that was never wanted. Set
+ * `WALLETS_E2E_DEBUG=1` to hear about it.
+ */
+function debugArtifacts(message: string): void {
+  if (process.env.WALLETS_E2E_DEBUG === '1') console.warn(`[@wallets-e2e/core] ${message}`);
+}
+
+function describeCause(cause: unknown): string {
+  return cause instanceof Error ? cause.message.split('\n')[0] : String(cause);
+}
+
+async function attachScreenshots(
+  context: BrowserContext,
+  testInfo: TestInfo,
+  mode: ArtifactMode,
+): Promise<void> {
+  if (mode === 'off') return;
+  if (!shouldRetainArtifact(mode, testInfo.status, testInfo.expectedStatus)) return;
+  debugArtifacts(`screenshots: mode=${mode} pages=${context.pages().length}`);
+
+  try {
+    const pages = context.pages().filter((page) => !page.isClosed());
+    const failed = testInfo.status !== testInfo.expectedStatus;
+    const named = nameScreenshotEntries(
+      pages.map((page) => ({ page, url: page.url() })),
+      { approvals: failed },
+    );
+
+    for (const { entry, attachment } of named) {
+      if (!attachment) continue;
+      try {
+        const body = await entry.page.screenshot();
+        await testInfo.attach(attachment.name, { body, contentType: 'image/png' });
+      } catch (cause) {
+        // A page can navigate or close mid-capture; the rest still get taken.
+        debugArtifacts(`screenshot of ${entry.url} failed: ${describeCause(cause)}`);
+      }
+    }
+  } catch {
+    // Artifact collection must never mask the test's real failure.
+  }
 }
 
 interface TrackedVideo {
@@ -198,6 +301,7 @@ async function attachVideos(
   videoDir: string,
   testInfo: TestInfo,
   mode: ArtifactMode,
+  artifacts: WalletArtifactOptions,
 ): Promise<void> {
   if (mode === 'off') return;
 
@@ -225,7 +329,10 @@ async function attachVideos(
   };
 
   try {
-    for (const { entry, attachment } of nameVideoEntries(orderVideoEntriesForAttachment(tracked))) {
+    const named = nameVideoEntries(orderVideoEntriesForAttachment(tracked), {
+      walletHomeVideo: artifacts.walletHomeVideo ?? false,
+    });
+    for (const { entry, attachment } of named) {
       let path: string | undefined;
       try {
         path = await entry.video.path();

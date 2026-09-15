@@ -12,13 +12,26 @@ export interface VideoAttachmentName {
 
 export type VideoRole = 'dapp' | 'wallet-approval' | 'wallet' | 'page';
 
+export interface NameVideoOptions {
+  /** Keep the wallet's home-page recording. Off by default: it is idle for the whole run. */
+  walletHomeVideo?: boolean;
+}
+
 /**
- * A recording of a page that never showed anything: the persistent context's
- * initial `about:blank`, and any page whose URL never resolved. Attaching these
- * puts blank players in the report next to the real ones.
+ * Extension pages that exist to run code, not to be looked at. MetaMask keeps
+ * `offscreen.html` open for the whole run to host workers; it renders nothing.
  */
-function isBlank(url: string): boolean {
-  return url === '' || url === 'about:blank';
+const NON_VISUAL_EXTENSION_PAGE = /\/(?:offscreen|background)\.html(?:[?#]|$)/i;
+
+/**
+ * A page that never showed anything: the persistent context's initial
+ * `about:blank`, any page whose URL never resolved, and a wallet's invisible
+ * worker pages. Its recording is a blank player and its end-of-test screenshot
+ * is a blank image, so neither is worth keeping.
+ */
+export function isNonVisualPageUrl(url: string): boolean {
+  if (url === '' || url === 'about:blank') return true;
+  return /^(?:chrome|moz)-extension:\/\//i.test(url) && NON_VISUAL_EXTENSION_PAGE.test(url);
 }
 
 function roleOf(url: string): VideoRole {
@@ -42,21 +55,65 @@ function roleOf(url: string): VideoRole {
  */
 export function nameVideoEntries<T extends NamedEntry>(
   entries: readonly T[],
+  options: NameVideoOptions = {},
 ): { entry: T; attachment: VideoAttachmentName | undefined }[] {
+  return nameEntries(entries, 'video', options);
+}
+
+export interface NameScreenshotOptions {
+  /**
+   * Include the wallet's approval windows. They are worth a still only when something went wrong:
+   * by the time a passing test ends, an approval it already dealt with is an empty shell.
+   */
+  approvals?: boolean;
+}
+
+/**
+ * Names screenshots the same way as recordings — `screenshot`,
+ * `screenshot-wallet-approval`, `screenshot-wallet` — and skips the pages that
+ * show nothing. A wallet's home page is kept here even though its recording is
+ * not: one still image of where the wallet ended up is worth having.
+ */
+export function nameScreenshotEntries<T extends NamedEntry>(
+  entries: readonly T[],
+  options: NameScreenshotOptions = {},
+): { entry: T; attachment: VideoAttachmentName | undefined }[] {
+  const kept = options.approvals
+    ? entries
+    : entries.filter((entry) => roleOf(entry.url) !== 'wallet-approval' || isNonVisualPageUrl(entry.url));
+  const named = nameEntries(kept, 'screenshot', { walletHomeVideo: true });
+  const byEntry = new Map(named.map((row) => [row.entry, row.attachment]));
+
+  return entries.map((entry) => ({ entry, attachment: byEntry.get(entry) }));
+}
+
+function nameEntries<T extends NamedEntry>(
+  entries: readonly T[],
+  prefix: 'video' | 'screenshot',
+  options: NameVideoOptions = {},
+): { entry: T; attachment: VideoAttachmentName | undefined }[] {
+  const { walletHomeVideo = false } = options;
   const seen = new Map<VideoRole, number>();
   let kept = 0;
 
-  return entries.map((entry) => {
-    if (isBlank(entry.url)) return { entry, attachment: undefined };
+  const roles = entries.map((entry) => (isNonVisualPageUrl(entry.url) ? undefined : roleOf(entry.url)));
+  // A wallet's home page is open for the whole run and shows nothing that is
+  // not already in the approval windows, so its recording is dropped — unless
+  // it is the only recording there is, as in a wallet-only test.
+  const dropWalletHome =
+    !walletHomeVideo && roles.some((role) => role !== undefined && role !== 'wallet');
 
-    const role = roleOf(entry.url);
+  return entries.map((entry, index) => {
+    const role = roles[index];
+    if (role === undefined) return { entry, attachment: undefined };
+    if (role === 'wallet' && dropWalletHome) return { entry, attachment: undefined };
     const count = (seen.get(role) ?? 0) + 1;
     seen.set(role, count);
     kept += 1;
 
-    if (kept === 1) return { entry, attachment: { name: 'video', role } };
+    if (kept === 1) return { entry, attachment: { name: prefix, role } };
 
     const suffix = count > 1 ? `-${count}` : '';
-    return { entry, attachment: { name: `video-${role}${suffix}`, role } };
+    return { entry, attachment: { name: `${prefix}-${role}${suffix}`, role } };
   });
 }

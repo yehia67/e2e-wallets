@@ -3,10 +3,19 @@ import type { PlaywrightTestConfig } from '@playwright/test';
 
 export type ArtifactMode = 'on' | 'off' | 'only-on-failure' | 'retain-on-failure';
 
-// Video only: Playwright itself owns trace and screenshots for these contexts, and a project's
-// `use` block always beats a fixture-supplied value, so a trace/screenshot knob here could not win.
+// Trace stays Playwright's: a project's `use.trace` always beats a fixture-supplied value, so a
+// knob here could not win. Video and screenshots are the package's, because Playwright captures
+// every page in the context — including a wallet's invisible worker pages — and does it the moment
+// the test body ends, which is too early for a fixture to filter.
 export interface WalletArtifactOptions {
   video?: ArtifactMode;
+  screenshot?: ArtifactMode;
+  /**
+   * Attach the wallet's home-page recording too. Off by default: that page is
+   * open for the whole run and idle for nearly all of it, while the approval
+   * windows already hold everything the wallet did.
+   */
+  walletHomeVideo?: boolean;
 }
 
 export const DEFAULT_ARTIFACT_MODES = {
@@ -14,6 +23,9 @@ export const DEFAULT_ARTIFACT_MODES = {
   screenshot: 'on',
   trace: 'retain-on-failure',
 } as const satisfies Record<'video' | 'screenshot' | 'trace', ArtifactMode>;
+
+/** Where `withWalletReporting` stashes a caller's `use.screenshot`, since it turns the real one off. */
+export const WALLET_SCREENSHOT_USE_KEY = 'walletScreenshot';
 
 function normalizeArtifactMode(value: unknown): ArtifactMode | undefined {
   const raw =
@@ -75,6 +87,14 @@ export function withWalletReporting<T extends PlaywrightTestConfig>(
   for (const [key, mode] of Object.entries(DEFAULT_ARTIFACT_MODES)) {
     if (use[key] === undefined) use[key] = mode;
   }
+
+  // Playwright's own screenshots would duplicate the fixture's, and it captures every page in the
+  // context — a wallet's invisible worker pages included — the moment the test body ends, too early
+  // for a fixture to filter. The caller's intent is carried over to the fixture's own capture.
+  if (use.screenshot !== undefined && use[WALLET_SCREENSHOT_USE_KEY] === undefined) {
+    use[WALLET_SCREENSHOT_USE_KEY] = use.screenshot;
+  }
+  use.screenshot = 'off';
 
   return {
     ...config,
