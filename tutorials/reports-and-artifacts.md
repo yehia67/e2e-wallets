@@ -191,7 +191,7 @@ npx playwright show-report playwright-report
 
 `open: 'never'` is the default, so a run never hijacks your browser — which matters most in CI, where a report that opens itself hangs the job. Open it when you want it.
 
-Each test in the report carries its own attachments. The first video is attached under the name `video`, which is the name the HTML reporter special-cases into an actual player; a context that opened several pages contributes `video-2`, `video-3`, and so on.
+Each test in the report carries its own attachments. The first video is attached under the name `video`, which is the name the HTML reporter special-cases into an actual player; the rest are named after what they show — `video-wallet-approval` for a wallet's approval window, `video-wallet` for its other pages — and numbered when a run produces more than one of a kind. Recordings of pages that never showed anything are dropped instead of attached, so you never open a blank player looking for the wallet.
 
 ## Reading a failure
 

@@ -21,9 +21,11 @@ import {
   type ArtifactMode,
   type WalletArtifactOptions,
 } from './artifacts.js';
+import { nameVideoEntries } from './video-names.js';
 import { orderVideoEntriesForAttachment } from './video-order.js';
 
 export * from './artifacts.js';
+export { nameVideoEntries, type VideoAttachmentName, type VideoRole } from './video-names.js';
 
 /** Extra fixture `createExtensionTest` adds on top of whatever base it was given. */
 export interface ExtensionFixtures {
@@ -201,42 +203,45 @@ async function attachVideos(
 
   const retain = shouldRetainArtifact(mode, testInfo.status, testInfo.expectedStatus);
   const handled = new Set<string>();
-  let index = 0;
+  let extras = 0;
 
-  const take = async (path: string): Promise<void> => {
+  const discard = (path: string): void => {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Already gone, or never written.
+    }
+  };
+
+  const take = async (path: string, name: string | undefined): Promise<void> => {
     if (handled.has(path)) return;
     handled.add(path);
-    index += 1;
-    if (!retain) {
-      try {
-        unlinkSync(path);
-      } catch {
-        // Already gone, or never written.
-      }
+    // `name` is undefined for a recording of a page that never showed anything.
+    if (!retain || name === undefined) {
+      discard(path);
       return;
     }
-    // First attachment is named exactly `video` so the HTML reporter renders it as a player.
-    await testInfo.attach(index === 1 ? 'video' : `video-${index}`, {
-      path,
-      contentType: 'video/webm',
-    });
+    await testInfo.attach(name, { path, contentType: 'video/webm' });
   };
 
   try {
-    for (const entry of orderVideoEntriesForAttachment(tracked)) {
+    for (const { entry, attachment } of nameVideoEntries(orderVideoEntriesForAttachment(tracked))) {
       let path: string | undefined;
       try {
         path = await entry.video.path();
       } catch {
         continue;
       }
-      if (path) await take(path);
+      if (path) await take(path, attachment?.name);
     }
 
     // Directory scanned as a fallback: popups can close before the `page` event bookkeeping sees them.
+    // Those recordings have no URL to name them by, so they are numbered apart from the named ones.
     if (existsSync(videoDir)) {
       for (const file of readdirSync(videoDir)) {
-        if (file.endsWith('.webm')) await take(join(videoDir, file));
+        if (!file.endsWith('.webm')) continue;
+        extras += 1;
+        await take(join(videoDir, file), `video-unmatched-${extras}`);
       }
     }
   } catch {

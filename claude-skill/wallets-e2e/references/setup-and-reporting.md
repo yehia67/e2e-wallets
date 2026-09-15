@@ -153,8 +153,15 @@ Override them in `use` when storage policy requires it. The fixture also accepts
 `artifacts: { video: ... }`; trace and screenshot remain ordinary Playwright `use` options.
 
 Persistent contexts can record several pages. The package attaches useful HTTP(S) dapp recordings
-first, wallet extension pages next, other non-blank pages next, and unused blank pages last. The
-first attachment is named exactly `video`, which makes Playwright's HTML reporter render its player.
+first, wallet extension pages next, and other non-blank pages after those; recordings of pages that
+never showed anything — the persistent context's initial `about:blank`, and any page whose URL never
+resolved — are discarded rather than attached, so the report holds no blank players.
+
+Each attachment is named after what it shows: `video` for the first kept recording, which is the
+name Playwright's HTML reporter special-cases into a player, then `video-wallet-approval` for a
+wallet's approval window, `video-wallet` for its other pages, and `video-page` for anything else.
+Several recordings of the same kind are numbered — `video-wallet-approval-2` and so on — so a run
+with two approvals stays readable without opening each one.
 
 ## Generate and review evidence
 
