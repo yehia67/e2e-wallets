@@ -167,21 +167,24 @@ failure. `artifacts: { screenshot: ... }` beats both.
 Screenshots are named like recordings: `screenshot`, then `screenshot-wallet-approval` and
 `screenshot-wallet`, numbered when there is more than one of a kind.
 
-Persistent contexts also record one video per page. The `page` fixture takes over the context's
-initial blank page rather than opening a second one, and recordings of pages that showed nothing —
-blank pages and invisible worker pages alike — are discarded instead of attached.
+Combined recording is pending publication. Package consumption of this feature is blocked until
+a compatible core release containing it is published. Do not promise it from an earlier release.
+In that release, `createExtensionTest` defaults to `artifacts.videoLayout: 'combined'`: one `video`
+attachment follows app → wallet → app on a shared timeline, including repeated approvals and
+interactions in iframes. Blank and invisible extension worker pages are excluded. Install FFmpeg
+with the `libvpx` encoder on PATH in the consumer's workstation and CI, or select an executable
+through `artifacts.ffmpegPath`. Page start times are estimated; the video captures browser
+viewports without desktop chrome or audio. After approving a manually retained wallet tab, call
+the public Playwright `page.bringToFront()` on the app page to resume its view.
 
-The package attaches useful HTTP(S) dapp recordings first, wallet extension pages next, and other
-non-blank pages after those. The wallet's home page is open for the whole run and idle for nearly
-all of it, so its recording is dropped unless it is the only one — pass
-`artifacts: { walletHomeVideo: true }` to keep it. Its screenshot is kept either way: one still of
-where the wallet ended up is worth having.
-
-Each attachment is named after what it shows: `video` for the first kept recording, which is the
-name Playwright's HTML reporter special-cases into a player, then `video-wallet-approval` for a
-wallet's approval window, `video-wallet` for its other pages, and `video-page` for anything else.
-Several recordings of the same kind are numbered — `video-wallet-approval-2` and so on — so a run
-with two approvals stays readable without opening each one.
+`artifacts.videoLayout: 'separate'` keeps individual page recordings. The fixture also falls back
+to this behavior, with a warning, if activity tracking or FFmpeg composition fails. The primary
+attachment is `video`, followed by `video-wallet-approval`, `video-wallet`, or `video-page`, with
+numbered suffixes for repeats. The idle wallet home recording is dropped unless it is the only
+recording or `artifacts.walletHomeVideo: true` was requested. That option affects separate mode
+only. Earlier published core releases use separate videos without the new layout options.
+Successful composition deletes intermediate page videos; failure-only retention deletes passing
+recordings. The wallet's visible home screenshot is kept independently of video layout.
 
 ## Generate and review evidence
 

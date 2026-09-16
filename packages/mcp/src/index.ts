@@ -120,7 +120,8 @@ const TOOLS: Tool[] = [
     description:
       'Reviewer evidence for a finished run: HTML report path, every video / screenshot / trace, ' +
       'and (by default) up to four representative screenshots embedded as images so the reviewer ' +
-      'can see the wallet popup and dapp result here. Call this on every finished run, pass or fail.',
+      'can see the wallet popup and dapp result here. Prefer the primary video named "video", ' +
+      'which may combine the app and wallet on one timeline. Call this on every finished run, pass or fail.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -139,8 +140,8 @@ const TOOLS: Tool[] = [
     name: 'get_artifact',
     description:
       'Fetch one artifact from get_report by its path. Screenshots under 1.5 MB are returned as ' +
-      'images the reviewer can see in this conversation. Videos are too large to embed; the result ' +
-      'gives the path to open locally or in the HTML report.',
+      'images the reviewer can see in this conversation. Videos return file metadata and a path; ' +
+      'show that path with the client’s local video player, or use the HTML report.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -226,7 +227,11 @@ function reportPayload(run: Run): Record<string, unknown> {
             `${videos.length} video(s), ${screenshots.length} screenshot(s).`,
       instruction:
         'Give the human reviewer the HTML report, every video path, and representative screenshots. ' +
-        'Open the HTML report to play videos in the browser. A passing run with no video of the ' +
+        'Prefer the attachment named "video" and show it directly when the client supports local ' +
+        'video playback; otherwise use the HTML report. Combined recording needs a core release ' +
+        'containing videoLayout and FFmpeg with libvpx; separate clips may indicate an older release, ' +
+        'an explicit separate layout, or a composition fallback. Check that the recording covers the ' +
+        'entire requested journey, including approval and deposit when requested. A passing run with no video of the ' +
         'wallet or dapp is incomplete evidence — the reviewer must be able to watch the real popups ' +
         'and on-chain flow.',
       videos,
@@ -320,7 +325,7 @@ function handle(name: string, args: Record<string, unknown>): CallToolResult {
         ...(artifact.kind === 'video'
           ? {
               note:
-                'Video is too large to embed. Open this path locally, or play it inside the HTML report from get_report.',
+                'Video is returned as local file metadata. Show this absolute path in the client’s video player when supported, or play it inside the HTML report from get_report.',
             }
           : {}),
         ...(artifact.kind === 'screenshot' && !image
@@ -357,13 +362,18 @@ The loop:
 1. get_guide "feature-to-test" before writing any test code.
 2. get_guide for the wallet ("metamask-evm" or "leather-stacks") for the driver API.
 3. Write the test in the project's own conventions, installing published @wallets-e2e/* packages.
+   Reuse existing local environment variables, wallets, and deployed contracts. Read get_guide
+   "setup-and-reporting" for video configuration: combined recording needs a compatible core release
+   with videoLayout and FFmpeg/libvpx on PATH (or artifacts.ffmpegPath). Older releases use separate videos.
 4. list_projects, then start_run — it returns a runId immediately. Do not block; a testnet
    confirmation can take ~10 minutes.
 5. Poll get_run. Read "executed", not just pass/fail: a suite in which every test skipped still
    exits 0, so executed=0 is an error, not a pass.
 6. ALWAYS call get_report when the run finishes, pass or fail. It embeds representative screenshots.
    Call get_artifact for any extra screenshot the reviewer should see. Give them the video paths and
-   HTML report so they can watch the real popups and on-chain transactions.
+   HTML report so they can watch the real popups and on-chain transactions. Prefer the attachment named
+   "video"; show it directly when the client supports local video playback. Verify that the recording
+   covers the complete requested journey, not only connection when approval and deposit were requested.
 
 Two rules that decide whether a wallet test is correct rather than merely green: queue the dapp click
 inside the driver's trigger callback (never click before the driver is listening), and assert on-chain

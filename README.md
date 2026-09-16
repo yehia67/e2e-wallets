@@ -172,7 +172,7 @@ official extension download and the package-only fixture.
 
 ## Reports and artifacts
 
-A wallet test fails inside a popup that has already closed. Two calls put every result in an HTML report, with a video and screenshot of **every** open page — the dapp *and* the wallet's own popup — for passed and failed tests. Failures also retain a trace.
+A wallet test can fail inside a popup that has already closed. Two calls put every result in an HTML report with video and screenshots of the visible app and wallet pages. Failures also retain a trace. The upcoming core release combines the app and wallet into one chronological video by default, using FFmpeg; package consumption of combined recording is blocked pending publication. Existing releases attach separate page videos.
 
 ```ts
 // playwright.config.ts
@@ -199,7 +199,7 @@ npx playwright test
 npx playwright show-report playwright-report
 ```
 
-Traces and screenshots come from Playwright itself — it does see a `launchPersistentContext`. Only the video needs attaching, which is the part `createExtensionTest` does.
+Playwright supplies the trace and page recordings. `createExtensionTest` captures screenshots of visible pages, attaches videos, and, in the upcoming release, combines them into one app → wallet → app recording. Install FFmpeg on PATH for composition, or set `artifacts.ffmpegPath`; `artifacts.videoLayout: 'separate'` keeps individual page videos.
 
 → **[Full walkthrough](./tutorials/reports-and-artifacts.md)** — which artifact answers which question, the `video`/`screenshot`/`trace` modes and their precedence, and what to upload from CI.
 

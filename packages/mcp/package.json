@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/mcp",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "description": "Your coding agent builds the feature; a QA agent proves it with a real MetaMask or Leather wallet and hands you video plus screenshots for your demo.",
   "keywords": [

@@ -1,312 +1,129 @@
-# Reports and artifacts: seeing what the wallet actually did
+# Reports and artifacts: following the app and wallet in one video
 
-A wallet test fails differently from a normal one. The dapp looks fine, the assertion times out, and the thing that went wrong happened inside a `chrome-extension://` popup that closed before you could look at it. A stack trace pointing at `expect(...).toBeVisible()` tells you nothing.
+`createExtensionTest` records a chronological video that switches from your app to the wallet
+approval window and returns when that window closes. A second approval appears later in the same
+video. Screenshots show the visible pages at the end of the test, and unexpected failures retain
+a Playwright trace.
 
-This tutorial wires up the three artifacts that do tell you something — a **video** of the run, a **screenshot of every open page including the wallet's own popup** for passed and failed tests, and a failure-only **trace** with DOM snapshots — and gets them attached to the test that produced them in Playwright's HTML report.
+**Release status:** combined recording and its `videoLayout` / `ffmpegPath` options are pending
+publication. Package consumption of this feature is blocked until a core release containing it is
+published with compatible wallet adapters. Earlier core releases produce separate page videos.
+The examples below describe the public API of the upcoming release.
 
-Two calls do it: `withWalletReporting` around your config, `createExtensionTest` for your fixture.
+## Install and prepare the wallet
 
-This tutorial consumes only public package exports. Both helpers ship in `@wallets-e2e/core@0.1.4`:
+Install the published packages in your application, choosing the adapter for your wallet:
 
 ```bash
-npm install --save-dev @wallets-e2e/core@0.1.4 @playwright/test
+npm install --save-dev @wallets-e2e/core @wallets-e2e/metamask @playwright/test
+npx playwright install chromium
 ```
 
-## What you get, and who actually produces it
+For Leather, install `@wallets-e2e/leather` instead of the MetaMask adapter. Wallet browser artifacts
+are separate downloads. Follow the [MetaMask package guide](../wallets/metamask/README.md) for its
+pinned official release and SHA-256 verification, or the
+[Leather package guide](../wallets/leather/README.md) for its pinned acquisition method. Store the
+unpacked extension in a caller-owned, gitignored directory such as
+`.wallet-extensions/metamask-13.13.1`.
 
-The one genuinely surprising thing here is how little of this the package does.
+Install an FFmpeg executable with the `libvpx` encoder on your workstation and CI runner. By
+default the fixture runs `ffmpeg` from `PATH`; `artifacts.ffmpegPath` can select another executable.
+FFmpeg combines Playwright's page recordings after the browser context closes.
 
-Extensions only load through `chromium.launchPersistentContext` — a plain `chromium.launch` cannot
-carry one, which is why the public `launchContext` package export owns context creation. The natural
-assumption is that Playwright's artifact machinery ignores a context it did not create itself. That
-assumption is wrong — checked against Playwright 1.62.1 and a real run:
-
-| Artifact | Who produces it | How |
-|---|---|---|
-| **Trace** | **Playwright** | Its instrumentation hooks *every* context creation, `launchPersistentContext` included. Set `use.trace` and a trace is recorded and attached under the name `trace`, which is what makes the HTML report render a "view trace" link. |
-| **Screenshot** | **Playwright** | Its screenshot recorder iterates every open page, not just the fixture's own — so passed and failed tests capture the dapp page **and** the wallet's `chrome-extension://` popup. Confirmed visually: the captured PNG is the real rendered wallet UI, not a blank frame. |
-| **Video** | **this package** | Playwright writes the `.webm` (the launch call passes `recordVideo.dir`) but never attaches it to a test and never cleans it up — its video handling lives in an internal context factory that only serves `browser.newContext()`. Left alone you get orphaned `page@<hash>.webm` files in a shared directory, attributable to no test. That is exactly what this repo had before. |
-
-So the honest division of labour:
-
-- **`createExtensionTest`** gives you a real extension-loaded persistent context as the stock `context` / `page` fixtures, and attaches the recorded video to the test that produced it — deleting it instead when the test passed and you asked for failures only.
-- **`withWalletReporting`** turns on the HTML reporter and sets the `video` / `screenshot` / `trace` modes, so Playwright's own trace and screenshot machinery has something to do.
-
-Neither of them captures a trace or a screenshot. Playwright does that, and does it better than you would expect.
-
-## Wiring it up
-
-### 1. Wrap the config
+## Configure reporting
 
 ```ts
-// playwright.config.ts in your dapp
+// playwright.config.ts in your application
 import { defineConfig } from '@playwright/test';
 import { withWalletReporting } from '@wallets-e2e/core';
 
-export default withWalletReporting(
-  defineConfig({
-    testDir: './tests',
-    fullyParallel: false,
-    workers: 1,
-    timeout: 120_000,
-    use: {
-      channel: 'chromium',
-    },
-  }),
-);
+export default withWalletReporting(defineConfig({
+  testDir: './tests',
+  workers: 1,
+  timeout: 120_000,
+}));
 ```
 
-`withWalletReporting` adds `reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]]` **only if you have not set `reporter` yourself**. The HTML report is unfiltered: passed, failed, skipped, and timed-out cases all appear. It fills in `use.video`, `use.screenshot` and `use.trace` **only where they are `undefined`**. Anything you set wins. If you assemble your own reporter list, take just the pair from `walletReporters({ outputFolder, open })` and spread it in.
-
-### 2. Build the fixture
-
-**Before** — the shape consumers previously hand-rolled. It is reproduced only to make the package
-factory's value clear:
-
 ```ts
-// tests/fixtures.ts — avoid this boilerplate
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { test as base, type BrowserContext } from '@playwright/test';
-import { launchContext } from '@wallets-e2e/core';
+// tests/fixtures.ts in your application
+import { resolve } from 'node:path';
+import { createExtensionTest } from '@wallets-e2e/core';
 
-export const EXTENSION_PATH = join(import.meta.dirname, '../.wallet-extensions/leather/dist');
-
-export const test = base.extend<{ extensionContext: BrowserContext }>({
-  extensionContext: async ({}, use, testInfo) => {
-    if (!existsSync(join(EXTENSION_PATH, 'manifest.json'))) {
-      testInfo.skip(true, `Leather is not built at ${EXTENSION_PATH}.`);
-      return;
-    }
-
-    const userDataDir = mkdtempSync(join(tmpdir(), `wallets-e2e-spike-${testInfo.testId}-`));
-    try {
-      const context = await launchContext({
-        extensionPath: EXTENSION_PATH,
-        userDataDir,
-        recordVideoDir: join(import.meta.dirname, '../test-results/videos'),
-      });
-      try {
-        await use(context);
-      } finally {
-        await context.close();
-      }
-    } finally {
-      rmSync(userDataDir, { recursive: true, force: true });
-    }
-  },
+export const test = createExtensionTest({
+  extensionPath: resolve('.wallet-extensions/metamask-13.13.1'),
+  extensionName: 'MetaMask',
+  artifacts: { videoLayout: 'combined' }, // default
 });
 
 export { expect } from '@playwright/test';
 ```
 
-Thirty-four lines, and the videos it wrote were orphans.
-
-**After** — use the public package fixture:
-
-```ts
-// tests/fixtures.ts in your dapp
-import { join } from 'node:path';
-import { createExtensionTest } from '@wallets-e2e/core';
-
-export const EXTENSION_PATH = join(import.meta.dirname, '../.wallet-extensions/leather/dist');
-
-export const test = createExtensionTest({
-  extensionPath: EXTENSION_PATH,
-  profilePrefix: 'wallets-e2e-spike',
-  extensionName: 'Leather',
-  buildCommand: 'npm run wallet:prepare', // diagnostic text; define it in your dapp
-  onMissingExtension: 'throw',
-});
-
-export { expect } from '@playwright/test';
-```
-
-The per-test temp profile, cleanup, build guard, and video attachment all move into the factory.
-`extensionName` and `buildCommand` only shape the missing-build message; `buildCommand` is not
-executed. `onMissingExtension` chooses skip or failure. Use the default `'throw'` in CI so a missing
-wallet cannot produce a false green result.
-
-`createExtensionTest` overrides the built-in `context` and `page` fixtures, so ordinary test code needs no new vocabulary. It also exposes `extensionContext`: the same object, under a name that reads better in a driver call.
-
-### The playwright-bdd variant
-
-Pass `base`. It must be playwright-bdd's `test` — `createBdd()` inspects the test object it is handed and rejects one that does not carry playwright-bdd's own fixtures, so building on `@playwright/test`'s `test` fails at step registration rather than mysteriously at run time.
-
-```ts
-// steps/fixtures.ts in your dapp
-import { createExtensionTest } from '@wallets-e2e/core';
-import { createWalletSteps } from '@wallets-e2e/core/bdd';
-import { leatherDriver } from '@wallets-e2e/leather';
-import { wallet } from '@wallets-e2e/leather/fixtures/wallet.js';
-import { test as bddTest } from 'playwright-bdd';
-
-export const test = createExtensionTest({
-  base: bddTest,
-  extensionPath: EXTENSION_PATH,
-  profilePrefix: 'wallets-e2e-bdd',
-  extensionName: 'Leather',
-  buildCommand: 'npm run wallet:prepare',
-});
-
-export const { Given, When, Then } = createWalletSteps({
-  test,
-  driver: leatherDriver,
-  seedPhrase: wallet.seedPhrase,
-  walletName: 'Leather',
-  connectTestId: 'connect-wallet',
-});
-```
-
-Overriding the built-in `context` name is what makes this work: bdd steps destructure the stock `{ context, page }` and get an extension-loaded browser without knowing extensions exist.
-
-### Layering your own fixtures on top
-
-`createExtensionTest` returns a normal Playwright `test`, so `.extend()` it like any other:
-
-```ts
-// tests/fixtures.ts in your dapp
-export const test = createExtensionTest({
-  extensionPath: EXTENSION_PATH,
-  profilePrefix: 'wallets-e2e',
-  extensionName: 'Leather',
-  buildCommand: 'npm run wallet:prepare',
-  onMissingExtension: 'throw',
-}).extend<Fixtures>({
-  unlockedContext: async ({ extensionContext }, use) => {
-    await leatherDriver.importWallet(extensionContext, wallet.seedPhrase);
-    await use(extensionContext);
-  },
-  // connectedApp, connectedAppOnTestnet — each building on the one above
-});
-```
-
-## Running and opening
+Tests and wallet drivers use the same `context` and `page` fixtures. Use
+`metamaskDriver` from `@wallets-e2e/metamask` or `leatherDriver` from `@wallets-e2e/leather` for wallet
+actions. Existing adapter test fixtures that use `createExtensionTest` inherit combined recording
+when their installed core version contains this feature. Pass `base: bddTest` when extending the
+`test` exported by `playwright-bdd`.
 
 ```bash
 npx playwright test
 npx playwright show-report playwright-report
 ```
 
-`open: 'never'` is the default, so a run never hijacks your browser — which matters most in CI, where a report that opens itself hangs the job. Open it when you want it.
+## What the video shows
 
-Each test in the report carries its own attachments. The first video is attached under the name `video`, which is the name the HTML reporter special-cases into an actual player; the rest are named after what they show — `video-wallet-approval` for a wallet's approval window, `video-wallet` for its other pages — and numbered when a run produces more than one of a kind. Recordings of pages that never showed anything are dropped instead of attached, and the wallet's idle home page is dropped too unless it is the only recording, so you never open a blank player looking for the wallet.
+The report attaches one WebM video under the name `video`. New visual pages, focus changes, and
+trusted pointer, keyboard, and input events choose the page shown on the timeline, including
+interactions within iframes. Closing an approval window restores the previously active page.
+An idle wallet home tab does not continually replace the app. Blank and invisible extension worker
+pages are excluded.
 
-Screenshots work the same way, and for a reason worth knowing: Playwright captures every page in the context the instant a test body ends, which is before any fixture can filter, and an extension context holds pages nobody wants to see — the initial `about:blank`, and a wallet's invisible worker pages like MetaMask's `offscreen.html`. `withWalletReporting` therefore turns Playwright's own screenshots off and the fixture takes them itself, of the visible pages only, named `screenshot`, `screenshot-wallet-approval`, `screenshot-wallet`. A `use.screenshot` you set is carried over to that capture rather than dropped.
+This is a composition of browser page viewports, without desktop chrome or audio. Sources are
+scaled proportionally and centered within a 1280 × 720 canvas at 25 frames per second. The shared
+clock preserves elapsed time during loading and approvals; each segment starts at its activity
+offset in the page's video. Page-video offsets are estimated from page registration time, so
+switches can differ slightly from the original rendering time.
 
-## Reading a failure
+If you manually leave an approval tab open, bring the app to the foreground after finishing:
 
-Four artifacts, four different questions. Reach for them in this order:
+```ts
+await page.bringToFront();
+```
 
-| Question | Artifact |
-|---|---|
-| What did the user see? | **`video`** — the whole run, in order. Fastest way to find *when* it went wrong. |
-| What was the wallet popup showing when it broke? | **`screenshot`** — one per open page, the extension popup included. Usually the actual answer: a network mismatch, an error banner, an approve button that never enabled. |
-| What exactly did the test do? | **`trace`** — every action with before/after DOM snapshots, plus network and console. Where you find out a click landed on the wrong element. |
-| Why did the assertion fail? | **`error-context`** — Playwright's own aria snapshot of the page at the point of error. |
+MetaMask's driver also restores app focus after an approval clears in a notification tab that
+stays open. Other adapters can use the same public Playwright call for such surfaces.
 
-The trace opens from the report's "view trace" link, or on its own:
+If FFmpeg is unavailable or composition fails, the fixture warns and attaches the separate page
+recordings. The test's result remains unchanged. To always keep separate recordings, use
+`artifacts: { videoLayout: 'separate' }`. In that mode `walletHomeVideo: true` also retains the
+wallet's idle home recording. Successful composition removes the intermediate page videos.
+
+## Retention and screenshots
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `use.video` | `'on'` | Record and retain video for every result. |
+| `use.screenshot` | `'on'` | The fixture captures visible pages at test end. |
+| `use.trace` | `'retain-on-failure'` | Playwright retains traces for unexpected failures. |
+
+`artifacts.video` overrides `use.video`; `artifacts.screenshot` overrides `use.screenshot`.
+Otherwise each uses the package default. Both accept `'on'`, `'off'`, `'only-on-failure'`, and
+`'retain-on-failure'`. Video retry modes are treated as `'retain-on-failure'`.
+An expected failure from `test.fail()` is not an unexpected failure worth retaining.
+
+`withWalletReporting` preserves your reporter and explicit modes. It parks `use.screenshot`
+under the fixture's own setting and disables Playwright's automatic screenshots, letting the
+fixture exclude invisible pages. Screenshots are named `screenshot`, `screenshot-wallet`, and
+`screenshot-wallet-approval`; approval stills are included for failed tests. Trace remains entirely
+Playwright's and is configured through `use.trace`.
+
+## CI artifacts
+
+Install FFmpeg in CI and upload both `playwright-report/` and `test-results/` even when tests fail.
+Open the primary `video` to find when the failure occurred, then inspect the trace at that moment:
 
 ```bash
-npx playwright show-trace test-results/replace-with-test-directory/trace.zip
+npx playwright show-trace test-results/your-test-directory/trace.zip
 ```
 
-You can also drag `trace.zip` onto [trace.playwright.dev](https://trace.playwright.dev) — it runs entirely in the browser and uploads nothing, which makes it the practical way to look at a trace a CI job produced.
-
-One habit worth building: **watch the video first, then open the trace at that moment.** The video tells you the popup appeared and then vanished; the trace tells you which of your steps closed it.
-
-## Tuning
-
-Three knobs, one vocabulary — `ArtifactMode` is `'on' | 'off' | 'only-on-failure' | 'retain-on-failure'`.
-
-| Option | Package default | Meaning |
-|---|---|---|
-| `use.video` | `'on'` | Always record, always attach. A wallet run's video is small and it is the artifact you reach for first. |
-| `use.screenshot` | `'on'` | On every result, capture every open page — dapp and popup — including successes. |
-| `use.trace` | `'retain-on-failure'` | Always record, keep only on failure. |
-
-Set them in the config's `use` block exactly as you would for any Playwright project:
-
-```ts
-export default withWalletReporting(
-  defineConfig({
-    use: {
-      channel: 'chromium',
-      trace: 'on',                  // debugging a flaky connect flow: keep every trace
-      video: 'retain-on-failure',
-    },
-  }),
-);
-```
-
-That is the whole story for **trace and screenshots**: `use.trace` and `use.screenshot` are ordinary Playwright options, Playwright reads them itself, and they always win.
-
-**Video is the one that also has a per-fixture override**, because video is the one this package owns:
-
-```ts
-export const test = createExtensionTest({
-  extensionPath: EXTENSION_PATH,
-  artifacts: { video: 'retain-on-failure' },
-});
-```
-
-`artifacts` takes `video` and nothing else. So the two chains are:
-
-- **`video`** — the fixture's `artifacts.video` first, then the project's `use.video`, then the package default `'on'`.
-- **`trace` and `screenshot`** — the project's `use` wins, full stop. The factory does supply the package defaults as `.extend()` option defaults, so a fixture built without `withWalletReporting` still traces and screenshots; a `use` value overrides them in the normal Playwright way.
-
-There used to be `artifacts.trace` and `artifacts.screenshot` too. They were removed rather than fixed: a project's `use` beats an `.extend()`-supplied option default, and `withWalletReporting` always fills `use.trace` and `use.screenshot`, so both knobs were silently ignored in the setup this tutorial recommends. An option that quietly does nothing is worse than no option.
-
-In practice: set all three in `use` and it behaves as you expect. Reach for `artifacts` only when one test file needs different **video** handling from the rest of the project.
-
-`'on-first-retry'` and `'on-all-retries'` are accepted for `video` and treated as `'retain-on-failure'`: the recording is written on the first attempt regardless, so there is nothing to gain by waiting for a retry.
-
-"Failure" here means `testInfo.status !== testInfo.expectedStatus`, not `status !== 'passed'`. A test marked `test.fail()` that duly failed did what it was told, and does not spend an artifact saying so.
-
-### Where the raw files land
-
-Playwright gives each test its own directory under `test-results/`, and everything goes there:
-
-```
-test-results/
-└── 1-1-load-and-unlock-Story--9d703-er-extension-video-recorded/
-    ├── videos/page@814de840bc31e633a271ca4a43c44841.webm   # raw recording
-    ├── attachments/video-4b00f6f9….webm                    # what the report links to
-    ├── test-failed-1.png                                   # one per page, on failure
-    ├── trace.zip
-    └── error-context.md
-```
-
-The `page@<hash>.webm` names are Chromium's, not yours — meaningless on purpose, which is exactly why an unattached video is useless and why the attachment step has to exist. Videos the run decided not to keep are deleted rather than left behind.
-
-The Chromium profile itself is a fresh temp directory per test (`profilePrefix` names it) and is removed when the test ends, pass or fail. No wallet state leaks from one test into the next.
-
-## CI
-
-`playwright-report/`, `test-results/` and `blob-report/` are all gitignored. Upload them as job artifacts instead:
-
-```yaml
-- name: Upload Playwright report
-  if: always()
-  uses: actions/upload-artifact@v4
-  with:
-    name: playwright-report
-    path: |
-      playwright-report/
-      test-results/
-    retention-days: 7
-```
-
-`if: always()` matters — the interesting run is the failed one, and a step that defaults to running only on success never fires for it.
-
-Three things worth knowing before turning everything on:
-
-- **`trace: 'retain-on-failure'`, not `'on'`.** A failing wallet run's `trace.zip` carries DOM snapshots of the dapp *and* of every popup frame, and reaches several megabytes without trying. Multiply that by a full suite kept on every green run and artifact storage becomes the slowest part of the job. Failures are the only traces anyone opens.
-- **Treat artifacts as sensitive.** Video is on by default and records the wallet's own UI, seed-phrase entry included. Fine for a throwaway fixture wallet; not fine if the wallet ever holds value. See the root README's *Bring your own account*.
-- **A green run that skipped everything is not a green run.** With `onMissingExtension: 'skip'`, a CI job that forgot to build the extension reports success having tested nothing. Build the extension in the job, or set `'throw'` there.
-
-## Related
-
-- [`quick-start.md`](./quick-start.md) — the driver API these tests are written against.
-- [`feature-files.md`](./feature-files.md) — the same artifacts, driven from Gherkin scenarios.
+The browser profile is temporary and removed after each test. Video-off mode creates no videos;
+failure-only mode deletes passing recordings. For collection diagnostics, set `WALLETS_E2E_DEBUG=1`.

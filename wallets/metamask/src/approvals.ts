@@ -233,6 +233,10 @@ export async function waitForApprovalToSettle(popup: Page, timeoutMs = 10_000): 
     clearPolls = stillShowing ? 0 : clearPolls + 1;
     if (clearPolls >= requiredConsecutiveClearPolls) {
       debugLog(`waitForApprovalToSettle: approval cleared after ${Date.now() - startedAt}ms`);
+      // A manually opened notification tab may stay open after approval. Restore the app's
+      // focus so both the browser and the shared recording leave the empty wallet surface.
+      const app = popup.context().pages().reverse().find((page) => /^https?:\/\//i.test(page.url()));
+      if (app && !app.isClosed()) await app.bringToFront();
       return;
     }
     await popup.waitForTimeout(200).catch(() => {});

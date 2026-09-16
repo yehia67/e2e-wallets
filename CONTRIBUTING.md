@@ -33,6 +33,28 @@ pnpm test            # `node --test` unit tests, then real Chromium windows driv
 
 If those don't get you to a passing test suite on a clean checkout, that's a bug in this project (or its docs) — please open an issue.
 
+## Contributor workflow: verify combined recording
+
+Install Playwright Chromium and an FFmpeg executable with the `libvpx` encoder. The integration
+check packs core into a temporary application, imports its public package entrypoint, and runs
+Chromium with a small MV3 extension. It decodes the attached video to verify five app → wallet →
+app cycles, a reused wallet surface with iframe input, and exclusion of invisible worker pages.
+It also checks separate/off modes, passing and failing retention, and missing-encoder fallback.
+
+```bash
+pnpm --filter @wallets-e2e/core build
+pnpm --filter @wallets-e2e/core typecheck
+pnpm --filter @wallets-e2e/core test
+pnpm --filter @wallets-e2e/metamask exec tsc --noEmit
+node packages/core/scripts/check-recording.mjs
+```
+
+Set `KEEP_RECORDING_CHECK=1` to retain the temporary report and recordings for visual review.
+This check verifies browser recording mechanics with a test extension; real MetaMask and Leather
+approval suites remain the adapter verification workflows. Publish a new core release before
+claiming that combined recording is available to package consumers; the MetaMask focus-restoration
+change also requires an adapter release. Refresh generated agent guides with `pnpm build:skill`.
+
 ## How the project is structured
 
 Every wallet extension this project supports is driven the same way, through one shared contract:
@@ -56,6 +78,37 @@ Every wallet extension this project supports is driven the same way, through one
 - **`packages/mcp`** is the MCP server any agent uses to run a consuming project's Playwright suite and collect video / screenshot artifacts.
 
 ## Publishing knowledge and MCP
+
+### Contributor workflow: publish the combined-video release
+
+This release uses core `0.1.6`, MetaMask `0.1.5`, knowledge `0.1.7`, and MCP `0.1.7`.
+Build and pack these versions before publication, checking that the MetaMask tarball depends on
+core `^0.1.6` and the MCP tarball depends on knowledge `^0.1.7`. Pack with pnpm so workspace
+dependencies become registry-compatible ranges. The browser extension is not part of the package.
+
+```bash
+pnpm --filter @wallets-e2e/core build
+pnpm --filter @wallets-e2e/metamask build
+pnpm --filter @wallets-e2e/knowledge build
+pnpm --filter @wallets-e2e/mcp build
+pnpm build:skill
+
+# Use a caller-selected temporary release directory and publish its inspected tarballs.
+pnpm --filter @wallets-e2e/core pack --pack-destination /tmp/wallets-e2e-video-release
+pnpm --filter @wallets-e2e/metamask pack --pack-destination /tmp/wallets-e2e-video-release
+pnpm --filter @wallets-e2e/knowledge pack --pack-destination /tmp/wallets-e2e-video-release
+pnpm --filter @wallets-e2e/mcp pack --pack-destination /tmp/wallets-e2e-video-release
+
+npm publish /tmp/wallets-e2e-video-release/wallets-e2e-core-0.1.6.tgz --access public
+npm publish /tmp/wallets-e2e-video-release/wallets-e2e-metamask-0.1.5.tgz --access public
+npm publish /tmp/wallets-e2e-video-release/wallets-e2e-knowledge-0.1.7.tgz --access public
+npm publish /tmp/wallets-e2e-video-release/wallets-e2e-mcp-0.1.7.tgz --access public
+```
+
+Publishing tarballs does not require Git mutations. After publication, check registry versions and
+dependencies, install the mutually compatible releases in a consuming application, and restart
+MCP clients so they load the new server instructions and knowledge guide. Upload the regenerated
+Claude skill ZIP if using that integration. FFmpeg/libvpx must be available where tests run.
 
 Publish **knowledge first**, then MCP. MCP depends on `@wallets-e2e/knowledge`; `pnpm publish` rewrites the workspace specifier to the version on disk. If knowledge is not on the registry yet, `npx @wallets-e2e/mcp` will fail to install.
 

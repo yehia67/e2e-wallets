@@ -11,7 +11,6 @@ import {
   type PlaywrightWorkerOptions,
   type TestInfo,
   type TestType,
-  type Video,
 } from '@playwright/test';
 import { launchContext } from '../context.js';
 import {
@@ -24,6 +23,9 @@ import {
 } from './artifacts.js';
 import { isNonVisualPageUrl, nameScreenshotEntries, nameVideoEntries } from './video-names.js';
 import { orderVideoEntriesForAttachment } from './video-order.js';
+import { trackVideos, type TrackedVideo } from './video-recorder.js';
+import { composeVideo } from './video-composition.js';
+import type { VideoSegment } from './video-timeline.js';
 
 export * from './artifacts.js';
 export {
@@ -55,8 +57,7 @@ export interface CreateExtensionTestOptions<
   profilePrefix?: string;
   /** Runs headed unless overridden, matching `launchContext` (AD-6). */
   headless?: boolean;
-  /** Video override, winning over the project's `use`. Trace and screenshots are configured the
-   * ordinary Playwright way, through `use.trace` and `use.screenshot`. */
+  /** Video/screenshot retention overrides and video composition options. Trace uses `use.trace`. */
   artifacts?: WalletArtifactOptions;
   /** Name used in the "not built" message. Defaults to the extension directory's parent name. */
   extensionName?: string;
@@ -118,11 +119,13 @@ export function createExtensionTest<
           headless,
           ...(videoMode === 'off' ? {} : { recordVideoDir: videoDir }),
         });
-        const videos = trackVideos(context);
-
+        let recording: Awaited<ReturnType<typeof trackVideos>> | undefined;
         try {
+          recording = await trackVideos(context, videoMode !== 'off' && artifacts.videoLayout !== 'separate');
           await use(context);
         } finally {
+          // End the timeline before teardown starts closing pages and changing focus.
+          const segments = recording?.stop() ?? [];
           // Taken before anything closes, while the pages are still on screen.
           await attachScreenshots(context, testInfo, resolveScreenshotMode(artifacts, testInfo));
           // Order is load-bearing: Playwright screenshots the context's pages as it closes, and
@@ -133,7 +136,10 @@ export function createExtensionTest<
           } catch {
             // A crashed browser can reject close(); attachVideos must still run.
           }
-          await attachVideos(videos, videoDir, testInfo, videoMode, artifacts);
+          const combined = await attachCombinedVideo(segments, testInfo, videoMode, artifacts);
+          await attachVideos(recording?.videos ?? [], videoDir, testInfo,
+            combined ? 'off' : videoMode, artifacts);
+          if (combined) rmSync(videoDir, { recursive: true, force: true });
         }
       } finally {
         rmSync(userDataDir, { recursive: true, force: true });
@@ -272,28 +278,31 @@ async function attachScreenshots(
   }
 }
 
-interface TrackedVideo {
-  video: Video;
-  url: string;
-}
-
-/** Collected before `context.close()` — `context.pages()` is empty afterwards, but `video.path()` only resolves after close. */
-function trackVideos(context: BrowserContext): TrackedVideo[] {
-  const tracked: TrackedVideo[] = [];
-
-  const track = (page: Page): void => {
-    const video = page.video();
-    if (!video) return;
-    const entry: TrackedVideo = { video, url: page.url() };
-    tracked.push(entry);
-    page.on('framenavigated', (frame) => {
-      if (frame === page.mainFrame()) entry.url = frame.url();
-    });
-  };
-
-  context.pages().forEach(track);
-  context.on('page', track);
-  return tracked;
+async function attachCombinedVideo(
+  segments: VideoSegment<TrackedVideo>[],
+  testInfo: TestInfo,
+  mode: ArtifactMode,
+  artifacts: WalletArtifactOptions,
+): Promise<boolean> {
+  if (artifacts.videoLayout === 'separate' || segments.length === 0 ||
+      !shouldRetainArtifact(mode, testInfo.status, testInfo.expectedStatus)) return false;
+  const output = testInfo.outputPath('video-combined.webm');
+  try {
+    const clips = await Promise.all(segments.map(async ({ source, start, end }) => ({
+      path: await source.video.path(),
+      offset: Math.max(0, start - source.startedAt) / 1000,
+      duration: (end - start) / 1000,
+    })));
+    await composeVideo(clips, output, artifacts.ffmpegPath);
+    await testInfo.attach('video', { path: output, contentType: 'video/webm' });
+    return true;
+  } catch (cause) {
+    console.warn(`[@wallets-e2e/core] Combined video unavailable; retaining separate page videos. ` +
+      `Install FFmpeg on PATH or set artifacts.ffmpegPath. ${describeCause(cause)}`);
+    return false;
+  } finally {
+    rmSync(output, { force: true });
+  }
 }
 
 async function attachVideos(

@@ -117,6 +117,14 @@ failures.
 
 `get_report` returns the HTML report, videos, traces and screenshots.
 
+The upcoming core release defaults to one chronological app → wallet → app video using FFmpeg
+with `libvpx`. Package consumption of combined recording is blocked pending publication of that
+core release. Configure it in your application's `createExtensionTest` fixture using
+`artifacts.videoLayout` and `artifacts.ffmpegPath`; the MCP serves the same setup guide through
+`get_guide`. Prefer the attachment named `video` and show it with your client's local video player
+or in the HTML report. Earlier core releases, explicit separate mode, or composition failures
+produce separate page videos. The MCP discovers report attachments for either layout.
+
 `get_artifact` returns one artifact. Screenshots come back as images.
 
 `cancel_run` stops a run still in flight.

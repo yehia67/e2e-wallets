@@ -17,7 +17,7 @@ npm install --save-dev @wallets-e2e/core @playwright/test
 ## What's exported
 
 - `launchContext({ extensionPath, userDataDir?, recordVideoDir?, headless? })` — the one place a persistent Chromium context with a wallet extension loaded gets created. Omit `recordVideoDir` and the context records nothing.
-- `createExtensionTest({ extensionPath, base?, artifacts?, profilePrefix?, extensionName?, buildCommand?, onMissingExtension? })` — a Playwright `test` whose `context` / `page` / `extensionContext` are a real extension-loaded persistent context, on a fresh temp profile that is cleaned up afterwards. The recorded video is attached to the test that produced it; Playwright's own machinery supplies the trace and screenshots (one per open page, so the wallet's popup is captured too). Pass `base` to build on playwright-bdd's `test`.
+- `createExtensionTest({ extensionPath, base?, artifacts?, profilePrefix?, extensionName?, buildCommand?, onMissingExtension? })` — a Playwright `test` whose `context` / `page` / `extensionContext` are a real extension-loaded persistent context, on a fresh temp profile that is cleaned up afterwards. The fixture attaches video and captures screenshots of visible pages; Playwright supplies the trace. Pass `base` to build on playwright-bdd's `test`.
 - `withWalletReporting(config)` — wraps a Playwright config with the list + unfiltered HTML reporters and the `video` / `screenshot` / `trace` modes, never overwriting anything you set yourself. Videos and screenshots are retained for passed and failed tests by default; traces remain failure-only.
 - `walletReporters({ outputFolder?, open? })` — just the reporter pair, for configs that assemble their own.
 - `ArtifactMode`, `WalletArtifactOptions`, `DEFAULT_ARTIFACT_MODES`, `ExtensionFixtures`, `CreateExtensionTestOptions` — the artifact retention vocabulary and the factory's option and fixture shapes.
@@ -37,6 +37,12 @@ npm install --save-dev @wallets-e2e/core @playwright/test
 - `BrowserContext`, `Page` — re-exported Playwright types, so a driver need not import them separately.
 
 ## Full docs
+
+Combined recording is pending publication; package consumption of this feature is blocked until
+a core release containing it is published. That release defaults to one chronological app → wallet
+→ app video. Install FFmpeg with the `libvpx` encoder on PATH, or set `artifacts.ffmpegPath`.
+Use `artifacts.videoLayout: 'separate'` for individual page videos. If composition fails, the
+fixture warns and retains separate recordings. Earlier releases use separate recordings.
 
 See the [package-consumer README](https://github.com/yehia67/e2e-wallets#readme),
 [quick-start tutorial](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md), and

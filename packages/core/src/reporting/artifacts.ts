@@ -10,8 +10,12 @@ export type ArtifactMode = 'on' | 'off' | 'only-on-failure' | 'retain-on-failure
 export interface WalletArtifactOptions {
   video?: ArtifactMode;
   screenshot?: ArtifactMode;
+  /** One chronological app/wallet video (default), or Playwright's separate page videos. */
+  videoLayout?: 'combined' | 'separate';
+  /** FFmpeg executable for combined videos. Defaults to `ffmpeg` on PATH. */
+  ffmpegPath?: string;
   /**
-   * Attach the wallet's home-page recording too. Off by default: that page is
+   * In separate mode, attach the wallet's home-page recording too. Off by default: that page is
    * open for the whole run and idle for nearly all of it, while the approval
    * windows already hold everything the wallet did.
    */

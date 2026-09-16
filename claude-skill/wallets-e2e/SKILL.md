@@ -43,6 +43,15 @@ use them instead of shelling out to Playwright:
 5. `get_report` on every finished run, pass or fail. Hand the HTML report, videos, and screenshots
    to the reviewer. `get_report` embeds representative screenshots; `get_artifact` fetches extras.
 
+For video setup and review, read [references/setup-and-reporting.md](references/setup-and-reporting.md)
+before running the suite. Combined app → wallet → app recording is pending a compatible core
+release; earlier releases provide separate page recordings. The combined feature needs FFmpeg
+with `libvpx` on PATH or `artifacts.ffmpegPath`, and defaults to `artifacts.videoLayout: 'combined'`.
+Show the resulting `video` attachment directly when the client supports local video playback;
+otherwise link it and the HTML report. If separate/fallback videos were produced, show the useful
+app and wallet recordings and explain the fallback. Verify the complete requested journey in the
+video: a connection-only clip does not prove an approve/deposit flow.
+
 If those tools are missing, tell the user to add:
 
 ```json
@@ -101,6 +110,10 @@ Read only the references needed for the requested work:
    focused tests. Reuse them rather than creating a parallel harness.
    If the package is absent, install a verified compatible public release. If none exists, report
    that blocker instead of cloning or linking toolkit source.
+   Reuse existing local environment variables, funded test wallets, and deployed contracts. Check
+   the project's deployment-address configuration before considering new deployment or wallet setup.
+   Do not regenerate wallets, redeploy contracts, or replace the real example flow with a synthetic
+   recording harness when the user wants evidence from their existing tests.
 2. Identify the chain and wallet explicitly: MetaMask takes an `EvmNetwork`; Leather takes a
    supported Stacks network. Do not infer a live network from an RPC URL or dapp label.
 3. Separate non-spending smoke coverage from live-chain spending coverage. Import, network, and

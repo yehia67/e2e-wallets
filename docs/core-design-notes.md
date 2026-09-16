@@ -128,14 +128,13 @@ For a context created by `chromium.launchPersistentContext`:
 | Artifact | Owner | Detail |
 |---|---|---|
 | **Trace** | Playwright | Its instrumentation hooks *every* context creation. A manual `tracing.start()` collides with it — `"Tracing has been already started"`. |
-| **Screenshot** | Playwright | Its recorder iterates every open page, so failures capture the dapp **and** the wallet's own `chrome-extension://` popup. |
-| **Video** | this package | Playwright writes the `.webm` but never attaches or cleans it up for such a context — its video handling only serves `browser.newContext()`. |
+| **Screenshot** | this package | The fixture captures visible pages before teardown. `withWalletReporting` disables Playwright's automatic screenshots to exclude invisible extension worker pages. |
+| **Video** | this package | Playwright writes one `.webm` per page. The fixture combines them on an activity timeline using FFmpeg and attaches one `video`, or retains separate recordings when requested or when composition fails. |
 
-So `createExtensionTest` owns video and nothing else. Left alone, the videos land as orphaned
-`page@<hash>.webm` files in a shared directory, attributable to no test; the fixture names them per
-test and attaches them, which is the entire reason the reporting module exists.
-
-`artifacts` on `createExtensionTest` therefore takes `video` only. Trace and screenshots are
-configured the ordinary Playwright way, through `use.trace` and `use.screenshot` — a project's `use`
-beats an `.extend()`-supplied option default, so a per-fixture knob for those two would have been
-silently ignored in the recommended setup.
+`createExtensionTest` owns screenshots, video attachment, retention, and video composition.
+`artifacts.video` and `artifacts.screenshot` override the project's modes; trace stays Playwright's.
+Combined recording is the upcoming release's default, pending publication. Package consumption
+of that feature is blocked until a compatible core release containing it is published.
+Consumers can choose `artifacts.videoLayout: 'separate'` or configure `artifacts.ffmpegPath`.
+The shared timeline follows new visual pages, focus, and trusted user interactions; closed pages
+restore the previous view. Page-video offsets are estimated from registration on a monotonic clock.
