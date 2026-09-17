@@ -21,7 +21,7 @@ import {
   type ArtifactMode,
   type WalletArtifactOptions,
 } from './artifacts.js';
-import { isNonVisualPageUrl, nameScreenshotEntries, nameVideoEntries } from './video-names.js';
+import { isNonVisualPageUrl, nameScreenshotEntries, nameVideoEntries, roleOf } from './video-names.js';
 import { orderVideoEntriesForAttachment } from './video-order.js';
 import { trackVideos, type TrackedVideo } from './video-recorder.js';
 import { composeVideo } from './video-composition.js';
@@ -65,6 +65,13 @@ export interface CreateExtensionTestOptions<
   buildCommand?: string;
   /** What to do when the extension is not built. `'throw'` (default) fails the test; `'skip'` marks it skipped. */
   onMissingExtension?: 'throw' | 'skip';
+  /**
+   * Size recordings are made at. Defaults to 1280x720.
+   *
+   * Sets `recordVideo.size` only. A wallet popup shares this context, so forcing a
+   * viewport on it would change the extension's own layout.
+   */
+  videoSize?: { width: number; height: number };
 }
 
 /**
@@ -86,6 +93,7 @@ export function createExtensionTest<
     extensionName = basename(dirname(extensionPath)),
     buildCommand,
     onMissingExtension = 'throw',
+    videoSize,
   } = options;
 
   return (base as TestType<TArgs, TWorkerArgs>).extend<ExtensionFixtures>({
@@ -286,6 +294,39 @@ async function attachCombinedVideo(
 ): Promise<boolean> {
   if (artifacts.videoLayout === 'separate' || segments.length === 0 ||
       !shouldRetainArtifact(mode, testInfo.status, testInfo.expectedStatus)) return false;
+
+  // Narrow the recording to what the reader can act on.
+  //
+  // `videoScope: 'app'` keeps only the application: a wallet's screens are third-party UI
+  // that behaves the same every run, and the assertions — not the footage — are what
+  // prove a signature happened. Otherwise just drop the wallet's idle home page, which is
+  // open throughout and shows nothing the approval windows do not.
+  //
+  // Either filter is skipped when it would leave nothing, so a wallet-only test still
+  // records something.
+  if (artifacts.videoScope === 'app') {
+    const appSegments = segments.filter(({ source }) => roleOf(source.url) === 'dapp');
+    if (appSegments.length > 0) {
+      // One continuous span per page, not its active moments.
+      //
+      // The timeline splits a page into segments of activity so an idle wallet tab cannot
+      // hide the app. Applied to the app itself that reasoning inverts: the waits — for a
+      // receipt, for an approval, for the UI to settle — are part of the flow being shown,
+      // and cutting them leaves disconnected fragments of a much longer run. Spanning each
+      // page's first to last activity keeps the recording watchable as a sequence.
+      const spans = new Map<TrackedVideo, VideoSegment<TrackedVideo>>();
+      for (const segment of appSegments) {
+        const existing = spans.get(segment.source);
+        spans.set(segment.source, existing
+          ? { source: segment.source, start: Math.min(existing.start, segment.start), end: Math.max(existing.end, segment.end) }
+          : segment);
+      }
+      segments = [...spans.values()].sort((a, b) => a.start - b.start);
+    }
+  } else {
+    const worthWatching = segments.filter(({ source }) => roleOf(source.url) !== 'wallet');
+    if (worthWatching.length > 0) segments = worthWatching;
+  }
   const output = testInfo.outputPath('video-combined.webm');
   try {
     const clips = await Promise.all(segments.map(async ({ source, start, end }) => ({

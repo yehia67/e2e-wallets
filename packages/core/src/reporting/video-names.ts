@@ -34,7 +34,7 @@ export function isNonVisualPageUrl(url: string): boolean {
   return /^(?:chrome|moz)-extension:\/\//i.test(url) && NON_VISUAL_EXTENSION_PAGE.test(url);
 }
 
-function roleOf(url: string): VideoRole {
+export function roleOf(url: string): VideoRole {
   if (/^https?:\/\//i.test(url)) return 'dapp';
   if (/^(?:chrome|moz)-extension:\/\//i.test(url)) {
     // Wallets raise approvals in their own notification window; the rest of the

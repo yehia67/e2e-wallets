@@ -12,6 +12,16 @@ export interface WalletArtifactOptions {
   screenshot?: ArtifactMode;
   /** One chronological app/wallet video (default), or Playwright's separate page videos. */
   videoLayout?: 'combined' | 'separate';
+  /**
+   * Which pages the combined video shows. `'app'` keeps only the application under test;
+   * `'all'` (the default) also includes the wallet's approval windows.
+   *
+   * A wallet's own screens are third-party UI behaving identically every run, and whether
+   * a signature happened is proved by the assertions, not by footage of it. `'app'` leaves
+   * the recording as a record of what the application did — which is the part a reviewer
+   * wrote and can act on.
+   */
+  videoScope?: 'app' | 'all';
   /** FFmpeg executable for combined videos. Defaults to `ffmpeg` on PATH. */
   ffmpegPath?: string;
   /**

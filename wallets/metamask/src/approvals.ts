@@ -33,7 +33,7 @@ async function fixCriticalError(page: Page, maxRetries = 3): Promise<void> {
   }
 }
 
-async function waitForMetaMaskLoad(page: Page): Promise<Page> {
+export async function waitForMetaMaskLoad(page: Page): Promise<Page> {
   await page.waitForLoadState('domcontentloaded').catch(() => {});
   await Promise.all(
     LOADING_INDICATORS.map((selector) =>
@@ -206,7 +206,10 @@ async function settleConfirmAlertModal(popup: Page): Promise<boolean> {
 
 async function scrollConfirmationToBottom(popup: Page): Promise<boolean> {
   const scrollDown = popup.locator('[data-testid="scroll-to-bottom"]');
-  if (!(await scrollDown.isVisible({ timeout: 500 }).catch(() => false))) return false;
+  // Probed on every poll while Confirm is disabled, so the timeout is part of the poll
+  // interval rather than a one-off: 500ms here doubled the time to notice an enabled
+  // button. The affordance is already rendered if it exists at all.
+  if (!(await scrollDown.isVisible({ timeout: 100 }).catch(() => false))) return false;
   debugLog('scrollConfirmationToBottom: clicking the scroll-to-bottom affordance');
   await scrollDown.click({ timeout: 5_000 }).catch(() => {});
   await popup.waitForTimeout(200).catch(() => {});
@@ -265,6 +268,12 @@ export async function clickTransactionConfirm(popup: Page): Promise<void> {
     }
 
     if (await scrollConfirmationToBottom(popup)) continue;
+    // Reading the whole body on every poll is the other half of the interval; only do it
+    // once the button has stayed disabled long enough for a real error to be the reason.
+    if (Date.now() - startedAt < 3_000) {
+      await popup.waitForTimeout(120);
+      continue;
+    }
     const text = (await popup.locator('body').innerText().catch(() => '')).toLowerCase();
     if (
       text.includes('unable to connect') ||
@@ -277,7 +286,7 @@ export async function clickTransactionConfirm(popup: Page): Promise<void> {
         `[wallets/metamask] confirmTransaction blocked (likely bad RPC). UI:\n${text.slice(0, 400)}`,
       );
     }
-    await popup.waitForTimeout(400);
+    await popup.waitForTimeout(150);
   }
   throw new Error(
     `[wallets/metamask] Confirm stayed disabled (gas/RPC). UI:\n${(await popup.locator('body').innerText().catch(() => '')).slice(0, 400)}`,
