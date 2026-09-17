@@ -7,7 +7,7 @@ export const test = createExtensionTest({
   extensionPath: EXTENSION_PATH,
   profilePrefix: 'wallets-e2e-metamask-spike',
   extensionName: 'MetaMask',
-  buildCommand: 'pnpm build:metamask (or bash wallets/metamask/scripts/build-extension.sh)',
+  buildCommand: 'npx wallets-e2e-metamask',
 });
 
 export { expect } from '@playwright/test';

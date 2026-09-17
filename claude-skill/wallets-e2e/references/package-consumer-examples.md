@@ -4,21 +4,25 @@ Use this reference when adding wallet E2E tests to a dapp that consumes `@wallet
 These examples require only installed packages and never import toolkit implementation files.
 The dapp remains responsible for producing wallet requests; the package drives the real extension UI.
 
-## Package and extension are separate dependencies
+## Where the extension comes from
 
-Installing a driver supplies its JavaScript API. Chromium also needs an unpacked wallet extension
-directory whose root contains `manifest.json`. Keep that external artifact in a stable, gitignored
-directory such as `.wallet-extensions/metamask-13.13.1` and pass its absolute path to the core
-fixture. Do not use repository-local extension paths or toolkit build scripts in a consumer project.
+Chromium needs an unpacked extension directory whose root contains `manifest.json`.
+
+For MetaMask, `@wallets-e2e/metamask` supplies it: the pinned 13.13.1 production build is fetched
+into the package at install time, and on first use if an install skipped scripts. A consumer
+project therefore holds no extension directory, no download script, and no extension path. For
+Leather, or for a build of your own, keep the unpacked directory in a stable, gitignored place such
+as `.wallet-extensions/leather/dist` and pass its absolute path to the core fixture. Never run
+toolkit build scripts from a consumer project.
 
 Use this ordinary application layout:
 
 ```text
 my-dapp/
-├── .wallet-extensions/       # unpacked extensions; gitignored
 ├── tests/
 │   ├── fixtures.ts
 │   └── wallet.spec.ts
+├── .env.wallet-e2e.local     # wallet secrets; gitignored
 ├── playwright.config.ts
 └── package.json
 ```
@@ -28,8 +32,8 @@ secrets. Never embed a funded wallet in a spec, report, screenshot, or committed
 
 ## Verify registry compatibility before MetaMask installation
 
-`core`, `leather` and `metamask` at `0.1.4` are a verified compatible set — all five example suites
-pass against them installed from the registry. Confirm the registry yourself rather than trusting
+`core@0.1.7` with `metamask@0.2.0` is a verified compatible set; for Leather, `core@0.1.7` with
+`leather@0.1.4`. Confirm the registry yourself rather than trusting
 this note to stay current:
 
 ```bash
@@ -41,40 +45,39 @@ After installing candidate versions in a disposable or caller-approved project, 
 exports before writing tests:
 
 ```bash
-node --input-type=module -e "const c=await import('@wallets-e2e/core'); for (const n of ['createExtensionTest','withWalletReporting','EVM_NETWORKS','createInjectedEvmRpc','waitForEthTransactionMined']) if (!(n in c)) throw new Error('missing core export: '+n); const m=await import('@wallets-e2e/metamask'); if (!('metamaskDriver' in m)) throw new Error('missing metamaskDriver')"
+node --input-type=module -e "const c=await import('@wallets-e2e/core'); for (const n of ['createExtensionTest','withWalletReporting','EVM_NETWORKS','createInjectedEvmRpc','waitForEthTransactionMined']) if (!(n in c)) throw new Error('missing core export: '+n); const m=await import('@wallets-e2e/metamask'); for (const n of ['metamaskDriver','createMetamaskTest','ensureMetamaskExtension']) if (!(n in m)) throw new Error('missing metamask export: '+n)"
 ```
 
 Only after that check passes, install the verified pair using the application's package manager:
 
 ```bash
 npm install --save-dev @playwright/test \
-  @wallets-e2e/core@0.1.4 \
-  @wallets-e2e/metamask@0.1.4
+  @wallets-e2e/core@0.1.7 \
+  @wallets-e2e/metamask@0.2.0
 npx playwright install chromium
 ```
 
 Pin exact versions rather than using `latest`, and run the export check above after any upgrade. If a
 future pair fails that check, say so and stop — never present a source checkout as package usage.
 
-## Prepare pinned MetaMask without the toolkit source
+## Prepare pinned MetaMask
 
-Download the official MetaMask 13.13.1 production extension directly into the consuming project:
+Nothing to write. Installing `@wallets-e2e/metamask` downloads and verifies the pinned 13.13.1
+production build. When an install blocks scripts — pnpm 10 by default, `npm --ignore-scripts`, an
+offline CI — the first test run fetches it, or run it explicitly:
 
 ```bash
-mkdir -p .wallet-extensions/metamask-13.13.1
-curl --fail --location \
-  https://github.com/MetaMask/metamask-extension/releases/download/v13.13.1/metamask-chrome-13.13.1.zip \
-  --output .wallet-extensions/metamask-chrome-13.13.1.zip
-unzip -q -o .wallet-extensions/metamask-chrome-13.13.1.zip \
-  -d .wallet-extensions/metamask-13.13.1
-node -e "const m=require('./.wallet-extensions/metamask-13.13.1/manifest.json'); if(m.version!=='13.13.1') throw new Error('Unexpected MetaMask '+m.version)"
+npx wallets-e2e-metamask
 ```
 
-Pin the URL and validate the manifest. Do not resolve a moving `latest` release or use MetaMask CI
-test artifacts; those can change UI unexpectedly and previously produced unusable Sepolia RPC
-credentials.
+Under pnpm 10, `{ "pnpm": { "onlyBuiltDependencies": ["@wallets-e2e/metamask"] } }` lets the
+install-time download run. `METAMASK_EXTENSION_PATH` overrides the packaged build with one of your
+own, which is never downloaded over.
 
-Provide the required values to the Playwright process through the environment:
+Never point a project at a moving `latest` release or at MetaMask CI test artifacts: they change
+the UI without notice and previously shipped unusable Sepolia RPC credentials.
+
+Provide the wallet through the environment:
 
 ```text
 WALLETS_E2E_SEED_PHRASE=<local test-wallet phrase>
@@ -82,9 +85,13 @@ WALLETS_E2E_ETH_ADDRESS=<matching 0x address>
 WALLETS_E2E_PASSWORD=<strong local extension password>
 ```
 
+A gitignored `.env.wallet-e2e.local` (or `.env.wallet-e2e` / `.env.local`) next to the Playwright
+config is loaded automatically, by the test process and by `@wallets-e2e/mcp` alike — so neither
+`--env-file` nor a wrapper script is needed, and secrets stay out of `package.json` and MCP client
+config. Real environment variables take precedence, which is how CI injects them.
+
 The password protects only the local browser profile. The seed must belong to a dedicated test
-wallet. Inject these variables before Node imports `@wallets-e2e/metamask` because the driver uses
-them while onboarding and verifying the unlocked address.
+wallet.
 
 ## MetaMask consumer configuration
 
@@ -113,16 +120,9 @@ export default withWalletReporting(
 
 ```ts
 // tests/fixtures.ts
-import { resolve } from 'node:path';
-import { createExtensionTest } from '@wallets-e2e/core';
+import { createMetamaskTest } from '@wallets-e2e/metamask';
 
-const extensionPath = resolve(
-  process.env.METAMASK_EXTENSION_PATH ?? '.wallet-extensions/metamask-13.13.1',
-);
-
-export const test = createExtensionTest({
-  extensionPath,
-  extensionName: 'MetaMask 13.13.1',
+export const test = createMetamaskTest({
   profilePrefix: 'my-dapp-metamask',
   onMissingExtension: 'throw',
 });
@@ -130,9 +130,11 @@ export const test = createExtensionTest({
 export { expect } from '@playwright/test';
 ```
 
-`createExtensionTest` does not download or build the extension. It fails clearly when
-`manifest.json` is absent, creates a fresh persistent profile, loads the unpacked extension, closes
-the context, and attaches its videos to the test.
+`createMetamaskTest` is `createExtensionTest` with the packaged extension, its version name and its
+prepare command already filled in; every other option is forwarded untouched. It fetches the build
+if it is missing, then creates a fresh persistent profile, loads the extension, closes the context,
+and attaches its videos to the test. A build it still cannot find fails the test with the command
+to run.
 
 ## MetaMask connection and arbitrary contract transaction
 

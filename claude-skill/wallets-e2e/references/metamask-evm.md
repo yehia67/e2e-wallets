@@ -6,8 +6,9 @@ Use `@wallets-e2e/metamask` for the real pinned MetaMask extension. The driver i
 Package: <https://www.npmjs.com/package/@wallets-e2e/metamask>
 Core dependency: <https://www.npmjs.com/package/@wallets-e2e/core>
 
-Install `@wallets-e2e/metamask@0.1.4` with `@wallets-e2e/core@0.1.4`. Pin exact versions, and never
-substitute a toolkit source checkout for the published package.
+Install `@wallets-e2e/metamask@0.2.0` with `@wallets-e2e/core@0.1.7`. Pin exact versions, and never
+substitute a toolkit source checkout for the published package. From `0.2.0` the package carries the
+pinned MetaMask 13.13.1 build itself — no extension download step in the consuming project.
 
 ## Smart-contract coverage and boundary
 

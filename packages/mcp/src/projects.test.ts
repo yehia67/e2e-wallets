@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { discoverProjects, resolveProject } from './projects.ts';
+import { discoverProjects, resolveProject, rootFromArgv } from './projects.ts';
 
 function tempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'wallets-e2e-mcp-projects-'));
@@ -38,5 +38,14 @@ describe('resolveProject', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('rootFromArgv', () => {
+  it('accepts --root <dir> and --root=<dir>, and ignores anything else', () => {
+    assert.equal(rootFromArgv(['--root', '/repo/dapp']), '/repo/dapp');
+    assert.equal(rootFromArgv(['--root=/repo/dapp']), '/repo/dapp');
+    assert.equal(rootFromArgv(['--headed']), undefined);
+    assert.equal(rootFromArgv(['--root']), undefined);
   });
 });

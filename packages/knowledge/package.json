@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/knowledge",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "description": "Agent guides for proving a dapp feature with a real MetaMask or Leather wallet: the feature-to-test workflow, driver APIs, and the evidence model. One source, served as a Claude skill and by @wallets-e2e/mcp.",
   "keywords": [

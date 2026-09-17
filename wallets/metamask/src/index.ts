@@ -16,6 +16,16 @@ import {
 } from './approvals.js';
 import { applyPendingNetworkToDapp, ensureNetwork } from './networks.js';
 
+export {
+  ensureMetamaskExtension,
+  isMetamaskExtensionReady,
+  metamaskExtensionPath,
+  METAMASK_EXTENSION_PATH_ENV,
+  METAMASK_PREPARE_COMMAND,
+  METAMASK_VERSION,
+} from './extension.js';
+export { createMetamaskTest, type CreateMetamaskTestOptions } from './test.js';
+
 export interface ApproveTokenPermissionOptions {
   spendLimit?: 'requested' | 'max' | number;
 }

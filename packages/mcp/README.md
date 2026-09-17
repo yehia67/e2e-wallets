@@ -67,20 +67,28 @@ shape.
     "wallets-e2e": {
       "command": "npx",
       "args": ["-y", "@wallets-e2e/mcp"],
-      "env": {
-        "WALLETS_E2E_MCP_ROOT": "/absolute/path/to/your/dapp",
-        "METAMASK_EXTENSION_PATH": "/absolute/path/to/your/dapp/.wallet-extensions/metamask",
-        "WALLETS_E2E_SEED_PHRASE": "your throwaway 12 words",
-        "WALLETS_E2E_ETH_ADDRESS": "0x... matching that seed",
-        "WALLETS_E2E_PASSWORD": "any strong password"
-      }
+      "env": {}
     }
   }
 }
 ```
 
-Everything in that `env` block is passed to the Playwright process the server starts, which is what
-your test fixture reads.
+The server looks for Playwright projects under the directory your client starts it in. Pass
+`--root /absolute/path/to/your/dapp` (or set `WALLETS_E2E_MCP_ROOT`) when that is somewhere else.
+
+Secrets do not belong in this file — an MCP client config is read by the agent and copied into
+logs. Put them in a gitignored `.env.wallet-e2e.local` beside your Playwright config instead:
+
+```text
+WALLETS_E2E_SEED_PHRASE=your throwaway 12 words
+WALLETS_E2E_ETH_ADDRESS=0x... matching that seed
+WALLETS_E2E_PASSWORD=any strong password
+```
+
+The server reads that file (or `.env.wallet-e2e` / `.env.local`, searched from the project upwards)
+and passes the values to the Playwright process it starts, which is what your test fixture reads.
+Anything already in the server's own environment wins, so an `env` block still overrides a file.
+The extension comes from `@wallets-e2e/metamask` itself, so no path to it is configured here.
 
 ## What the agent does
 

@@ -237,17 +237,16 @@ the actual wallet popups and mined transactions.
   "mcpServers": {
     "wallets-e2e": {
       "command": "npx",
-      "args": ["-y", "@wallets-e2e/mcp"],
-      "env": {
-        "WALLETS_E2E_MCP_ROOT": "/path/to/your/dapp",
-        "WALLETS_E2E_SEED_PHRASE": "your throwaway test wallet",
-        "WALLETS_E2E_ETH_ADDRESS": "0x...",
-        "WALLETS_E2E_PASSWORD": "..."
-      }
+      "args": ["-y", "@wallets-e2e/mcp", "--root", "/path/to/your/dapp"],
+      "env": {}
     }
   }
 }
 ```
+
+The wallet secrets go in a gitignored `.env.wallet-e2e.local` beside your Playwright config, not in
+this file: the server reads it and hands the values to the test run. `--root` defaults to the
+directory your client starts the server in.
 
 The same guides the MCP serves are a Claude skill, shipped in
 [`@wallets-e2e/knowledge`](https://www.npmjs.com/package/@wallets-e2e/knowledge):

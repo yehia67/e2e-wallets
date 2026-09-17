@@ -66,6 +66,12 @@ export interface CreateExtensionTestOptions<
   /** What to do when the extension is not built. `'throw'` (default) fails the test; `'skip'` marks it skipped. */
   onMissingExtension?: 'throw' | 'skip';
   /**
+   * Runs once per test, before the extension is required, so a wallet package can fetch its own
+   * build instead of making every consumer repository carry a download script. Failures fall
+   * through to `onMissingExtension`, which reports them with `buildCommand` in the message.
+   */
+  prepareExtension?: () => Promise<unknown>;
+  /**
    * Size recordings are made at. Defaults to 1280x720.
    *
    * Sets `recordVideo.size` only. A wallet popup shares this context, so forcing a
@@ -93,6 +99,7 @@ export function createExtensionTest<
     extensionName = basename(dirname(extensionPath)),
     buildCommand,
     onMissingExtension = 'throw',
+    prepareExtension,
     videoSize,
   } = options;
 
@@ -114,6 +121,11 @@ export function createExtensionTest<
       use: (context: BrowserContext) => Promise<void>,
       testInfo: TestInfo,
     ) => {
+      if (prepareExtension && !existsSync(join(extensionPath, 'manifest.json'))) {
+        // Swallowed on purpose: requireExtensionBuild below turns a still-missing extension into
+        // the one actionable message, rather than a fetch error from inside a fixture.
+        await prepareExtension().catch(() => undefined);
+      }
       requireExtensionBuild({ extensionPath, extensionName, buildCommand, onMissingExtension, testInfo });
 
       const videoMode = resolveVideoMode(artifacts, testInfo);

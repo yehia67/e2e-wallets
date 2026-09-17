@@ -16,11 +16,12 @@ Authoritative package locations:
 - `@wallets-e2e/leather`: <https://www.npmjs.com/package/@wallets-e2e/leather>
 - Repository metadata and issue tracker: <https://github.com/yehia67/e2e-wallets>
 
-### Compatibility status verified 2026-08-30
+### Compatibility status verified 2026-09-17
 
-`core`, `leather` and `metamask` at `0.1.4` are a verified compatible set, carrying `EvmNetwork`,
-`EVM_NETWORKS`, the injected EVM RPC, `createExtensionTest` and the reporting API. All five example
-suites pass against them installed from the registry.
+`core@0.1.7` with `metamask@0.2.0`, and `core@0.1.7` with `leather@0.1.4`, are verified compatible
+sets, carrying `EvmNetwork`, `EVM_NETWORKS`, the injected EVM RPC, `createExtensionTest`,
+`createMetamaskTest` and the reporting API. `metamask@0.2.0` also ships its own pinned extension, so
+a consuming project needs no extension download step.
 
 Pin exact versions, and confirm the registry yourself rather than trusting this note to stay current:
 
@@ -42,7 +43,8 @@ API. Read the `WALLETS_E2E_*` variables in your own project instead.
   importing it shares one publicly known wallet.
 - The MetaMask fixture throws at import time unless `WALLETS_E2E_SEED_PHRASE`,
   `WALLETS_E2E_ETH_ADDRESS` and `WALLETS_E2E_PASSWORD` are all set, and its error text names a
-  repository script that the package does not ship.
+  repository script that the package does not ship. (From `metamask@0.2.0` that fixture also reads
+  `.env.wallet-e2e.local` / `.env.local` from your working directory — still not a consumer API.)
 - Both drivers' `importWallet` verifies the unlocked account against an expected address, so your
   own seed needs its matching address too: `WALLETS_E2E_ETH_ADDRESS` for MetaMask,
   `WALLETS_E2E_MAINNET_ADDRESS` and `WALLETS_E2E_TESTNET_ADDRESS` for Leather. Supplying the seed
@@ -52,10 +54,10 @@ API. Read the `WALLETS_E2E_*` variables in your own project instead.
 
 ```bash
 # Leather (Stacks)
-pnpm add -D @wallets-e2e/core@0.1.4 @wallets-e2e/leather@0.1.4 @playwright/test
+pnpm add -D @wallets-e2e/core@0.1.7 @wallets-e2e/leather@0.1.4 @playwright/test
 
 # MetaMask (EVM)
-pnpm add -D @wallets-e2e/core@0.1.4 @wallets-e2e/metamask@0.1.4 @playwright/test
+pnpm add -D @wallets-e2e/core@0.1.7 @wallets-e2e/metamask@0.2.0 @playwright/test
 ```
 
 Package installation modifies dependency files and downloads executable dependencies. Inspect the
@@ -80,22 +82,37 @@ Use `createExtensionTest`; it creates a fresh temporary Chromium profile for eac
 extension, overrides the stock `context` and `page` fixtures, records every page, closes the context
 to flush videos, attaches them to the current test, and removes the temporary profile.
 
+For MetaMask, use `createMetamaskTest`: it is `createExtensionTest` with the extension already
+resolved. `@wallets-e2e/metamask` ships its own pinned 13.13.1 build and downloads it on first use
+when an install skipped its `postinstall`, so the project needs no extension path and no download
+script of its own.
+
+```ts
+// tests/fixtures.ts
+import { createMetamaskTest } from '@wallets-e2e/metamask';
+
+export const test = createMetamaskTest({
+  profilePrefix: 'my-dapp-wallet',
+  // Prefer throw in CI. Use skip locally only when an absent extension is intentionally optional.
+  onMissingExtension: process.env.CI ? 'throw' : 'skip',
+});
+
+export { expect } from '@playwright/test';
+```
+
+For Leather, or for a build of your own, name the directory holding `manifest.json` yourself:
+
 ```ts
 // tests/fixtures.ts
 import { resolve } from 'node:path';
 import { createExtensionTest } from '@wallets-e2e/core';
 
-const EXTENSION_PATH = resolve(
-  process.env.METAMASK_EXTENSION_PATH ?? '.wallet-extensions/metamask/dist',
-);
-
 export const test = createExtensionTest({
-  extensionPath: EXTENSION_PATH,
+  extensionPath: resolve('.wallet-extensions/leather/dist'),
   profilePrefix: 'my-dapp-wallet',
-  extensionName: 'MetaMask', // or Leather
+  extensionName: 'Leather',
   // This text is shown on a missing build; it is not executed by createExtensionTest.
-  buildCommand: 'npm run wallet:prepare',
-  // Prefer throw in CI. Use skip locally only when an absent extension is intentionally optional.
+  buildCommand: 'pnpm build:leather',
   onMissingExtension: process.env.CI ? 'throw' : 'skip',
 });
 

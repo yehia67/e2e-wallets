@@ -10,8 +10,21 @@ export interface TestProject {
 const CONFIG_NAMES = ['playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs'];
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'lib', '.turbo', 'test-results', 'playwright-report', '.features-gen']);
 
-export function projectsRoot(): string {
-  return resolve(process.env.WALLETS_E2E_MCP_ROOT?.trim() || process.cwd());
+/**
+ * Where the server looks for test projects: `--root <dir>` on the command line, else
+ * `WALLETS_E2E_MCP_ROOT`, else the working directory the client started the server in. The flag
+ * exists so a client config can name the repository inline, without a wrapper script to export it.
+ */
+export function projectsRoot(argv: string[] = process.argv.slice(2)): string {
+  return resolve(rootFromArgv(argv) || process.env.WALLETS_E2E_MCP_ROOT?.trim() || process.cwd());
+}
+
+export function rootFromArgv(argv: string[]): string | undefined {
+  const inline = argv.find((arg) => arg.startsWith('--root='));
+  if (inline) return inline.slice('--root='.length).trim() || undefined;
+  const index = argv.indexOf('--root');
+  if (index !== -1) return argv[index + 1]?.trim() || undefined;
+  return undefined;
 }
 
 function findConfig(dir: string): string | undefined {

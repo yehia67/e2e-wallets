@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { loadProjectEnv } from './env.js';
 import { resolveProject, type TestProject } from './projects.js';
 import {
   assertSafeTestFile,
@@ -63,12 +64,23 @@ export function listRuns(): Run[] {
 }
 
 /**
- * Env handed to the runner. Secrets are read from this server's own environment and never accepted
- * as tool arguments, so a seed phrase cannot reach a model's context or a client's logs. Spending
- * gates are likewise inherited, not settable per call.
+ * Env handed to the runner. Secrets come from this server's own environment and from the project's
+ * own env files — never from tool arguments, so a seed phrase cannot reach a model's context or a
+ * client's logs. Spending gates are likewise inherited, not settable per call.
+ *
+ * Reading the env files here is what lets a client point straight at `npx @wallets-e2e/mcp`: the
+ * server no longer needs a shell wrapper that sources them into its process first.
  */
-function runnerEnv(jsonPath: string): NodeJS.ProcessEnv {
-  return { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: jsonPath, FORCE_COLOR: '0' };
+function runnerEnv(jsonPath: string, projectDir: string): NodeJS.ProcessEnv {
+  return {
+    ...loadProjectEnv(projectDir),
+    ...process.env,
+    PLAYWRIGHT_JSON_OUTPUT_NAME: jsonPath,
+    FORCE_COLOR: '0',
+    // Corepack aborts when the project pins a package manager version that is not installed. A test
+    // run is not the place to enforce that, and the failure looks like a broken server.
+    COREPACK_ENABLE_PROJECT_SPEC: process.env.COREPACK_ENABLE_PROJECT_SPEC ?? '0',
+  };
 }
 
 export interface StartRunOptions {
@@ -112,7 +124,7 @@ export function startRun(options: StartRunOptions): Run {
   // No shell: args are passed as an array, so nothing in them can be interpreted as a command.
   const child = spawn(launcher.command, args, {
     cwd: project.dir,
-    env: runnerEnv(jsonPath),
+    env: runnerEnv(jsonPath, project.dir),
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: false,
   });

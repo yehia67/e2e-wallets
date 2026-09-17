@@ -11,36 +11,44 @@ One uninterrupted session: import → network → connect → send ETH → appro
 
 ## Install
 
-Compatibility status verified 2026-08-30: published MetaMask `0.1.0` imports EVM APIs that published
-core `0.1.3` does not export. There is currently no working npm version pair. Do not clone or link
-repository source as a substitute. After compatible versions are published, install the verified
-pair in your dapp:
+Compatibility status verified 2026-09-17: `@wallets-e2e/metamask@0.2.0` with
+`@wallets-e2e/core@0.1.7`. Pin exact versions, and never substitute a repository checkout or link
+for the published package.
 
 ```bash
-WALLETS_CORE_VERSION=replace-with-verified-version
-WALLETS_METAMASK_VERSION=replace-with-verified-version
 npm install --save-dev \
-  "@wallets-e2e/core@${WALLETS_CORE_VERSION}" \
-  "@wallets-e2e/metamask@${WALLETS_METAMASK_VERSION}" \
+  @wallets-e2e/core@0.1.7 \
+  @wallets-e2e/metamask@0.2.0 \
   @playwright/test
 npx playwright install chromium
 ```
 
-The replacement values are deliberately invalid. Confirm the installed core exports `EVM_NETWORKS`,
-`createExtensionTest`, `createInjectedEvmRpc`, and `waitForEthTransactionMined` before proceeding.
+Confirm the installed core exports `EVM_NETWORKS`, `createExtensionTest`, `createInjectedEvmRpc` and
+`waitForEthTransactionMined`, and that metamask exports `createMetamaskTest`, before proceeding.
 
-The package supplies the driver; the browser extension is a separate artifact. Download the pinned
-official production build into your dapp:
+## The extension
+
+The package brings its own. Installing it downloads and verifies the pinned 13.13.1 production
+build into the package, so your repository needs no download script, no `.wallet-extensions`
+directory and no extension path.
+
+pnpm 10 and npm `--ignore-scripts` block install scripts by default, and CI may install offline. In
+those cases the first test run downloads it instead — or you can do it yourself:
 
 ```bash
-mkdir -p .wallet-extensions/metamask-13.13.1
-curl --fail --location \
-  https://github.com/MetaMask/metamask-extension/releases/download/v13.13.1/metamask-chrome-13.13.1.zip \
-  --output .wallet-extensions/metamask-chrome-13.13.1.zip
-unzip -q -o .wallet-extensions/metamask-chrome-13.13.1.zip \
-  -d .wallet-extensions/metamask-13.13.1
-node -e "const m=require('./.wallet-extensions/metamask-13.13.1/manifest.json'); if(m.version!=='13.13.1') throw new Error('Unexpected MetaMask '+m.version)"
+npx wallets-e2e-metamask          # idempotent; no-op when the pinned build is already there
+npx wallets-e2e-metamask --force  # re-download, replacing whatever is there
 ```
+
+To allow the install-time download under pnpm 10, add to your `package.json`:
+
+```json
+{ "pnpm": { "onlyBuiltDependencies": ["@wallets-e2e/metamask"] } }
+```
+
+Set `METAMASK_EXTENSION_PATH` to drive an unpacked build of your own instead; nothing is downloaded
+over it. `metamaskExtensionPath()` returns the path in use, and `ensureMetamaskExtension()` is the
+programmatic form of the command above.
 
 ## Fixture wallet
 
@@ -52,22 +60,21 @@ WALLETS_E2E_ETH_ADDRESS=<matching 0x address>
 WALLETS_E2E_PASSWORD=<strong local extension password>
 ```
 
-Inject them before Node imports the driver. Never put a funded seed phrase in a spec, report, video,
+A `.env.wallet-e2e.local`, `.env.wallet-e2e` or `.env.local` in the directory you run Playwright
+from — or up to four directories above it — is read automatically, so `playwright test` needs no
+`--env-file` flag. Real environment variables always win over a file. Never put a funded seed phrase in a spec, report, video,
 or committed fixture.
 
 ## Usage
 
 ```ts
-import { resolve } from 'node:path';
-import { EVM_NETWORKS, createExtensionTest } from '@wallets-e2e/core';
-import { metamaskDriver } from '@wallets-e2e/metamask';
+import { EVM_NETWORKS } from '@wallets-e2e/core';
+import { createMetamaskTest, metamaskDriver } from '@wallets-e2e/metamask';
 import { expect } from '@playwright/test';
 
-const test = createExtensionTest({
-  extensionPath: resolve('.wallet-extensions/metamask-13.13.1'),
-  extensionName: 'MetaMask 13.13.1',
-  onMissingExtension: 'throw',
-});
+// The extension, its version and the "not prepared" message are already wired up.
+// Everything createExtensionTest accepts — profilePrefix, headless, artifacts — is forwarded.
+const test = createMetamaskTest();
 
 test('connects on the selected network', async ({ extensionContext: context, page }) => {
   await page.goto('http://127.0.0.1:3000');
