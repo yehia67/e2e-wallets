@@ -4,6 +4,9 @@
 #   scripts/release.sh            # every gate + pack + tarball checks; prints the publish commands
 #   scripts/release.sh --publish  # the same, then `npm publish` each tarball in dependency order
 #   scripts/release.sh --quick    # unit tests and typecheck only: for iterating, never for a release
+#   scripts/release.sh --skip-gates [--publish]
+#                                 # pack, check and publish only: right after a full run passed in
+#                                 # this same checkout and nothing changed since
 #
 # Every example suite runs for real — both wallet extensions are built, the fixture wallet comes
 # from the environment or the root .env files, and a skipped test fails the gate: a run that skipped
@@ -16,11 +19,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PUBLISH=0
 QUICK=0
+SKIP_GATES=0
 for arg in "$@"; do
   case "$arg" in
     --publish) PUBLISH=1 ;;
     --quick) QUICK=1 ;;
-    -h|--help) sed -n 2,13p "$0"; exit 0 ;;
+    --skip-gates) SKIP_GATES=1 ;;
+    -h|--help) sed -n 2,16p "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -53,6 +58,17 @@ node -e "const [m]=process.versions.node.split('.').map(Number); if (m<22) proce
 if [ -n "$(git status --porcelain)" ]; then
   echo "note: the working tree has uncommitted changes; the tarballs are built from the files on disk."
 fi
+if [ "$PUBLISH" -eq 1 ]; then
+  # Checked before the long gate, not after it.
+  npm whoami >/dev/null 2>&1 || fail "not logged in to npm (run: npm login, then npm whoami)"
+  echo "npm user: $(npm whoami)"
+fi
+
+if [ "$SKIP_GATES" -eq 1 ]; then
+  printf '\n\033[33m--skip-gates: trusting the last full run of this checkout; only pack, checks and publish.\033[0m\n'
+  step "Build"
+  pnpm build
+else
 
 step "Install (workspace links, lockfile)"
 pnpm install --frozen-lockfile=false
@@ -143,11 +159,14 @@ if [ -n "$(git status --porcelain claude-skill)" ]; then
   echo "note: claude-skill/ changed; commit it with the release."
 fi
 
+fi # SKIP_GATES
+
 step "Pack"
 DEST="$(mktemp -d "${TMPDIR:-/tmp}/wallets-e2e-release.XXXXXX")"
 tarball() { echo "$DEST/wallets-e2e-$1-$(version "$1").tgz"; }
 for pkg in "${PACKAGES[@]}"; do
-  pnpm --filter "@wallets-e2e/$pkg" pack --pack-destination "$DEST" >/dev/null
+  # `pnpm pack` takes no --filter (pnpm 9: "Unknown option: 'recursive'"); run it in the package.
+  (cd "$(dir_of "$pkg")" && pnpm pack --pack-destination "$DEST" >/dev/null)
   [ -f "$(tarball "$pkg")" ] || fail "expected tarball $(tarball "$pkg") was not produced"
 done
 

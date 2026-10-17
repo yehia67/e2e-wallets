@@ -99,7 +99,8 @@ suite for real** — a suite with a skipped test, a flaky test or nothing execut
 because a run that skipped proves nothing — then the skill build, pack and the tarball dependency
 ranges. It spends testnet funds and takes a while. `scripts/release.sh --publish` then publishes
 the tarballs in dependency order, skipping versions already on the registry; `--quick` runs only
-typecheck and unit tests and refuses to publish. By hand:
+typecheck and unit tests and refuses to publish; `--skip-gates` goes straight to pack, checks and
+publish, for use right after a full run passed in the same checkout. By hand:
 
 ```bash
 pnpm build
@@ -108,8 +109,9 @@ node packages/core/scripts/check-recording.mjs
 pnpm build:skill
 
 # Use a caller-selected temporary release directory and publish its inspected tarballs.
+# `pnpm pack` takes no --filter; run it inside each package.
 for pkg in core metamask evidence knowledge mcp; do
-  pnpm --filter @wallets-e2e/$pkg pack --pack-destination /tmp/wallets-e2e-release
+  pnpm --filter @wallets-e2e/$pkg exec pnpm pack --pack-destination /tmp/wallets-e2e-release
 done
 
 npm publish /tmp/wallets-e2e-release/wallets-e2e-core-0.2.0.tgz --access public
