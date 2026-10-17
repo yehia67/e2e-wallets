@@ -21,10 +21,9 @@ extension has driven it and left video plus screenshots a reviewer can watch.
 - Leather package: [npmjs.com/package/@wallets-e2e/leather](https://www.npmjs.com/package/@wallets-e2e/leather)
 - MCP server (how agents run the suite and collect artifacts): [npmjs.com/package/@wallets-e2e/mcp](https://www.npmjs.com/package/@wallets-e2e/mcp)
 
-`core`, `leather` and `metamask` are published at `0.1.4` as a mutually compatible set, verified
-against all five example suites installed from the registry. Install that set; never substitute
-repository source for the public package. Recheck registry metadata rather than trusting this note
-to stay current.
+`core` `0.2.0`, `metamask` `0.2.1`, `leather` `0.1.4`, `evidence` `0.1.0` and `mcp` `0.2.1` are the
+mutually compatible set. Install that set; never substitute repository source for the public
+package. Recheck registry metadata rather than trusting this note to stay current.
 
 For a normal consuming application, start with
 [references/package-consumer-examples.md](references/package-consumer-examples.md). Its examples use
@@ -44,13 +43,13 @@ use them instead of shelling out to Playwright:
    to the reviewer. `get_report` embeds representative screenshots; `get_artifact` fetches extras.
 
 For video setup and review, read [references/setup-and-reporting.md](references/setup-and-reporting.md)
-before running the suite. Combined app → wallet → app recording is pending a compatible core
-release; earlier releases provide separate page recordings. The combined feature needs FFmpeg
-with `libvpx` on PATH or `artifacts.ffmpegPath`, and defaults to `artifacts.videoLayout: 'combined'`.
-Show the resulting `video` attachment directly when the client supports local video playback;
-otherwise link it and the HTML report. If separate/fallback videos were produced, show the useful
-app and wallet recordings and explain the fallback. Verify the complete requested journey in the
-video: a connection-only clip does not prove an approve/deposit flow.
+before running the suite. The `video` attachment is an mp4 of full-size frames built from
+screenshots (FFmpeg with `libx264` on PATH or `artifacts.ffmpegPath`); `videoSource: 'chromium'`
+keeps Playwright's WebM recordings composed app → wallet → app, which crop the page once a wallet
+popup has opened. Show the `video` directly when the client supports local video playback;
+otherwise link it and the HTML report, or build the evidence site (`get_report` with
+`evidence: true`). Verify the complete requested journey in the video: a connection-only clip does
+not prove an approve/deposit flow. Prove every write with `settleWrite` (hash → receipt → state).
 
 If those tools are missing, tell the user to add:
 

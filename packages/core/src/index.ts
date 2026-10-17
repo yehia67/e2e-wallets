@@ -3,4 +3,8 @@ export * from './reporting/index.js';
 export * from './driver.js';
 export * from './stacks.js';
 export * from './evm.js';
+export * from './env.js';
+export * from './aa.js';
+export * from './settle.js';
+export * from './tx-probe.js';
 export type { BrowserContext, Page } from '@playwright/test';

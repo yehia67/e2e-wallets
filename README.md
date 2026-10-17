@@ -172,7 +172,7 @@ official extension download and the package-only fixture.
 
 ## Reports and artifacts
 
-A wallet test can fail inside a popup that has already closed. Two calls put every result in an HTML report with video and screenshots of the visible app and wallet pages. Failures also retain a trace. The upcoming core release combines the app and wallet into one chronological video by default, using FFmpeg; package consumption of combined recording is blocked pending publication. Existing releases attach separate page videos.
+A wallet test can fail inside a popup that has already closed. Two calls put every result in an HTML report with a video and screenshots of the visible app and wallet pages, plus the page's console errors on failure. Failures also retain a trace. The video is an mp4 built from screenshots of the page in use (`artifacts.videoSource: 'screenshots'`, the default, FFmpeg required): Chromium's own recorder stops covering the page once a wallet has opened an approval as a second tab, and every later frame is cropped. `'chromium'` keeps that recorder, composed app → wallet → app on one timeline.
 
 ```ts
 // playwright.config.ts
@@ -199,7 +199,7 @@ npx playwright test
 npx playwright show-report playwright-report
 ```
 
-Playwright supplies the trace and page recordings. `createExtensionTest` captures screenshots of visible pages, attaches videos, and, in the upcoming release, combines them into one app → wallet → app recording. Install FFmpeg on PATH for composition, or set `artifacts.ffmpegPath`; `artifacts.videoLayout: 'separate'` keeps individual page videos.
+Playwright supplies the trace. `createExtensionTest` records the video, captures screenshots of visible pages and attaches the page logs. Install FFmpeg on PATH, or set `artifacts.ffmpegPath`. `@wallets-e2e/evidence` turns the JSON report into a static site of every test's video, screenshots and transaction links (`wallets-e2e-evidence --report report.json --out site --netlify`), and `@wallets-e2e/core` ships the helpers a wallet suite repeats: `settleWrite` (hash → receipt → state), `createTxProbe` (the app's transaction probe contract), `assertSponsoredUserOperation` (ERC-4337 receipts), `requiredEnv`/`optionalEnv`/`liveWritesEnabled`.
 
 → **[Full walkthrough](./tutorials/reports-and-artifacts.md)** — which artifact answers which question, the `video`/`screenshot`/`trace` modes and their precedence, and what to upload from CI.
 

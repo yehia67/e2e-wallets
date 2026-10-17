@@ -79,6 +79,14 @@ absolute balance.
 - The HTML reporter output is usually `playwright-report/index.html`; generated `test-results`
   contain raw/attached media and traces.
 
+## The video shows the top-left of the page with grey beside it
+
+That is Chromium's recorder (`artifacts.videoSource: 'chromium'`, or the fallback when FFmpeg is
+missing) after a wallet opened an approval as a second tab of the same window: its compositor
+surface stops covering the page, while the page's own viewport is unchanged. Install FFmpeg with
+`libx264` and leave `videoSource` at its default (`'screenshots'`), which photographs the page
+through CDP and is always full-size. Check the run's warnings for "needs FFmpeg".
+
 ## Extension or environment mismatch
 
 - Check `manifest.json` exists at the configured extension path.

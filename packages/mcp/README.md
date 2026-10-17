@@ -125,13 +125,13 @@ failures.
 
 `get_report` returns the HTML report, videos, traces and screenshots.
 
-The upcoming core release defaults to one chronological app → wallet → app video using FFmpeg
-with `libvpx`. Package consumption of combined recording is blocked pending publication of that
-core release. Configure it in your application's `createExtensionTest` fixture using
-`artifacts.videoLayout` and `artifacts.ffmpegPath`; the MCP serves the same setup guide through
-`get_guide`. Prefer the attachment named `video` and show it with your client's local video player
-or in the HTML report. Earlier core releases, explicit separate mode, or composition failures
-produce separate page videos. The MCP discovers report attachments for either layout.
+The `video` attachment is an mp4 built from screenshots of the page in use (FFmpeg with `libx264`
+on the runner); `artifacts.videoSource: 'chromium'` in the application's fixture keeps Playwright's
+WebM recordings instead, composed app → wallet → app. The MCP discovers either. Prefer the
+attachment named `video` and show it with your client's local video player or in the HTML report.
+`get_report` with `evidence: true` also builds a static evidence site (one page with every test's
+video, screenshots and transaction links, via `@wallets-e2e/evidence`) and returns its folder as
+`evidenceDir`.
 
 `get_artifact` returns one artifact. Screenshots come back as images.
 

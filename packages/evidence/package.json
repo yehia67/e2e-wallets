@@ -1,0 +1,57 @@
+{
+  "name": "@wallets-e2e/evidence",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Turns a Playwright JSON report of a wallet e2e run into a static evidence site: every spec and test with its video, screenshots and transaction links, ready to open or deploy.",
+  "keywords": [
+    "playwright",
+    "wallet",
+    "e2e",
+    "evidence",
+    "report",
+    "video",
+    "netlify",
+    "web3"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yehia67/e2e-wallets.git",
+    "directory": "packages/evidence"
+  },
+  "bugs": {
+    "url": "https://github.com/yehia67/e2e-wallets/issues"
+  },
+  "homepage": "https://github.com/yehia67/e2e-wallets#readme",
+  "bin": {
+    "wallets-e2e-evidence": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3"
+  }
+}

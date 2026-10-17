@@ -129,12 +129,21 @@ For a context created by `chromium.launchPersistentContext`:
 |---|---|---|
 | **Trace** | Playwright | Its instrumentation hooks *every* context creation. A manual `tracing.start()` collides with it — `"Tracing has been already started"`. |
 | **Screenshot** | this package | The fixture captures visible pages before teardown. `withWalletReporting` disables Playwright's automatic screenshots to exclude invisible extension worker pages. |
-| **Video** | this package | Playwright writes one `.webm` per page. The fixture combines them on an activity timeline using FFmpeg and attaches one `video`, or retains separate recordings when requested or when composition fails. |
+| **Video** | this package | By default one mp4 encoded with FFmpeg from CDP screenshots of the page in use (`videoSource: 'screenshots'`). With `'chromium'`, Playwright writes one `.webm` per page and the fixture combines them on an activity timeline, or retains separate recordings when requested or when composition fails. |
+| **Page logs** | this package | Console errors and warnings and uncaught errors of every page, attached as `page-logs` on failure. |
 
-`createExtensionTest` owns screenshots, video attachment, retention, and video composition.
+`createExtensionTest` owns screenshots, video, page logs, retention and video composition.
 `artifacts.video` and `artifacts.screenshot` override the project's modes; trace stays Playwright's.
-Combined recording is the upcoming release's default, pending publication. Package consumption
-of that feature is blocked until a compatible core release containing it is published.
-Consumers can choose `artifacts.videoLayout: 'separate'` or configure `artifacts.ffmpegPath`.
-The shared timeline follows new visual pages, focus, and trusted user interactions; closed pages
-restore the previous view. Page-video offsets are estimated from registration on a monotonic clock.
+
+**Why screenshots, not Chromium's recorder.** Measured on Playwright 1.62/1.63 with headless
+Chromium: `recordVideo` films the compositor surface. Once a wallet driver opens an approval as a
+second tab of the same window (`context.newPage()` + `goto(notification.html)`), the app page's
+recorded surface covers about 1024×576 of its 1280×720 viewport and every later frame is the
+top-left of the page with flat background beside it. `Page.getLayoutMetrics`,
+`Browser.getWindowBounds` and `window.innerWidth` keep reporting 1280×720 throughout;
+`Browser.setWindowBounds` and `page.setViewportSize` nudges change nothing, and the per-page
+WebM files are already cropped before composition. `page.screenshot()` (CDP `captureScreenshot`)
+is always the full viewport, so the default video is one screenshot every 200 ms of the page in
+use, encoded with real per-frame timing (`libx264`, mp4). The activity tracker that chooses the
+page is shared with the Chromium path, whose timeline follows new visual pages, focus and trusted
+user interactions; closed pages restore the previous view.

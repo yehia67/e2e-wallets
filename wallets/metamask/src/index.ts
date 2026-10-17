@@ -9,6 +9,7 @@ import {
   clickConnectApprove,
   clickSignatureConfirm,
   clickTransactionConfirm,
+  confirmFollowUpPrompt,
   resolveApprovalPage,
   resolveMetaMaskApprovalPage,
   waitForApprovalToSettle,
@@ -37,6 +38,13 @@ export interface MetaMaskDriver extends WalletDriver<EvmNetwork> {
     options?: ApproveTokenPermissionOptions,
   ): Promise<void>;
   confirmSignature(context: BrowserContext, trigger: () => Promise<void>): Promise<void>;
+  /**
+   * Confirms a prompt the wallet raised on its own after a driver call returned — typically the
+   * network switch or chain add a connect kit asks for right after `connectToDapp`. Only looks at
+   * approval pages already open; returns false when none shows a button within `timeoutMs`
+   * (default 8 s).
+   */
+  confirmFollowUpPrompt(context: BrowserContext, options?: { timeoutMs?: number }): Promise<boolean>;
   /**
    * Confirms an approval that is already pending, returning false when none appears.
    * Lets a caller drain however many popups an action queued without knowing the count.
@@ -313,6 +321,11 @@ export const metamaskDriver: MetaMaskDriver = {
     }
     await clickTransactionConfirm(popup);
     await waitForApprovalToSettle(popup);
+  },
+
+  async confirmFollowUpPrompt(context: BrowserContext, options: { timeoutMs?: number } = {}): Promise<boolean> {
+    const extensionId = await resolveExtensionId(context);
+    return confirmFollowUpPrompt(context, extensionId, options.timeoutMs);
   },
 
   async confirmSignature(context: BrowserContext, trigger: () => Promise<void>): Promise<void> {

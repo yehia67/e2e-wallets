@@ -16,6 +16,10 @@ function tempProject(files: Record<string, string>): string {
 }
 
 describe('parseEnvFile', () => {
+  it('leaves out a key with an empty value, so it cannot shadow a set one', () => {
+    assert.deepEqual(parseEnvFile('EMPTY=\nQUOTED=""\nKEPT=x'), { KEPT: 'x' });
+  });
+
   it('reads plain, quoted, exported and value-with-= lines, and skips comments', () => {
     const parsed = parseEnvFile(
       ['# comment', 'PLAIN=one', 'QUOTED="two"', "SINGLE='three'", 'export EXPORTED=four', 'URL=https://x/y?a=b', '', 'NOEQ'].join('\n'),

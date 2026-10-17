@@ -28,6 +28,8 @@ export function parseEnvFile(contents: string): Record<string, string> {
     ) {
       value = value.slice(1, -1);
     }
+    // An empty value is "not set here": it must not shadow the environment or a farther file.
+    if (value === '') continue;
     if (!(key in parsed)) parsed[key] = value;
   }
   return parsed;

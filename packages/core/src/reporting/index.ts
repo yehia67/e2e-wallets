@@ -15,12 +15,23 @@ import {
 import { launchContext } from '../context.js';
 import {
   DEFAULT_ARTIFACT_MODES,
+  DEFAULT_PAGE_LOGS_MODE,
   resolveArtifactMode,
+  resolveScreenshotVideoOptions,
+  resolveVideoSource,
   shouldRetainArtifact,
   WALLET_SCREENSHOT_USE_KEY,
   type ArtifactMode,
   type WalletArtifactOptions,
 } from './artifacts.js';
+import { collectPageLogs, type PageLogCollector } from './page-logs.js';
+import {
+  encodeScreenshotVideo,
+  ffmpegAvailable,
+  startScreenshotRecorder,
+  type FrameEntry,
+  type ScreenshotRecorder,
+} from './screenshot-video.js';
 import { isNonVisualPageUrl, nameScreenshotEntries, nameVideoEntries, roleOf } from './video-names.js';
 import { orderVideoEntriesForAttachment } from './video-order.js';
 import { trackVideos, type TrackedVideo } from './video-recorder.js';
@@ -28,6 +39,15 @@ import { composeVideo } from './video-composition.js';
 import type { VideoSegment } from './video-timeline.js';
 
 export * from './artifacts.js';
+export { collectPageLogs, type PageLogCollector } from './page-logs.js';
+export { trackActivity, type ActivityEvents, type ActivityTracker } from './activity-tracker.js';
+export {
+  buildConcatList,
+  encodeScreenshotVideo,
+  ffmpegEncodeArgs,
+  type FrameEntry,
+  type ScreenshotRecorder,
+} from './screenshot-video.js';
 export {
   isNonVisualPageUrl,
   nameScreenshotEntries,
@@ -72,12 +92,18 @@ export interface CreateExtensionTestOptions<
    */
   prepareExtension?: () => Promise<unknown>;
   /**
-   * Size recordings are made at. Defaults to 1280x720.
-   *
-   * Sets `recordVideo.size` only. A wallet popup shares this context, so forcing a
-   * viewport on it would change the extension's own layout.
+   * Size Chromium's own recordings are made at (`videoSource: 'chromium'` only). Unset by
+   * default: each page then records at its own shape and composition normalises them.
    */
   videoSize?: { width: number; height: number };
+  /** Chromium's window size (`--window-size`). See `LaunchContextOptions.windowSize`. */
+  windowSize?: { width: number; height: number };
+  /**
+   * The viewport every page in the context gets — the wallet's pages included, since they are
+   * pages of this context, so it changes which layout the extension renders. Unset by default
+   * (Playwright's 1280×720). A project's `use.viewport` does not reach a hand-launched context.
+   */
+  viewport?: { width: number; height: number };
 }
 
 /**
@@ -101,6 +127,8 @@ export function createExtensionTest<
     onMissingExtension = 'throw',
     prepareExtension,
     videoSize,
+    windowSize,
+    viewport,
   } = options;
 
   return (base as TestType<TArgs, TWorkerArgs>).extend<ExtensionFixtures>({
@@ -129,37 +157,61 @@ export function createExtensionTest<
       requireExtensionBuild({ extensionPath, extensionName, buildCommand, onMissingExtension, testInfo });
 
       const videoMode = resolveVideoMode(artifacts, testInfo);
+      const source = await resolveVideoSourceOnce(artifacts, videoMode);
       const userDataDir = mkdtempSync(join(tmpdir(), `${profilePrefix}-${testInfo.testId}-`));
       const videoDir = testInfo.outputPath('videos');
+      const framesDir = testInfo.outputPath('video-frames');
+      const pageLogsMode = resolvePageLogsMode(artifacts, testInfo);
 
       try {
         const context = await launchContext({
           extensionPath,
           userDataDir,
           headless,
-          ...(videoMode === 'off' ? {} : { recordVideoDir: videoDir }),
+          videoSize,
+          windowSize,
+          viewport,
+          ...(videoMode !== 'off' && source === 'chromium' ? { recordVideoDir: videoDir } : {}),
         });
+        const logs = pageLogsMode === 'off' ? undefined : collectContextLogs(context);
         let recording: Awaited<ReturnType<typeof trackVideos>> | undefined;
+        let recorder: ScreenshotRecorder | undefined;
         try {
-          recording = await trackVideos(context, videoMode !== 'off' && artifacts.videoLayout !== 'separate');
+          if (source === 'chromium') {
+            recording = await trackVideos(context, videoMode !== 'off' && artifacts.videoLayout !== 'separate');
+          } else if (videoMode !== 'off') {
+            recorder = await startScreenshotRecorder(context, {
+              framesDir,
+              options: resolveScreenshotVideoOptions(artifacts.screenshotVideo),
+              scope: artifacts.videoScope ?? 'all',
+              debug: debugArtifacts,
+            });
+          }
           await use(context);
         } finally {
           // End the timeline before teardown starts closing pages and changing focus.
           const segments = recording?.stop() ?? [];
+          const frames = (await recorder?.stop()) ?? [];
           // Taken before anything closes, while the pages are still on screen.
           await attachScreenshots(context, testInfo, resolveScreenshotMode(artifacts, testInfo));
           // Order is load-bearing: Playwright screenshots the context's pages as it closes, and
           // closing flushes the videos. Blank pages go first so they reach neither artifact.
           await closeNonVisualPages(context);
+          logs?.stop();
           try {
             await context.close();
           } catch {
             // A crashed browser can reject close(); attachVideos must still run.
           }
-          const combined = await attachCombinedVideo(segments, testInfo, videoMode, artifacts);
-          await attachVideos(recording?.videos ?? [], videoDir, testInfo,
-            combined ? 'off' : videoMode, artifacts);
-          if (combined) rmSync(videoDir, { recursive: true, force: true });
+          if (source === 'chromium') {
+            const combined = await attachCombinedVideo(segments, testInfo, videoMode, artifacts);
+            await attachVideos(recording?.videos ?? [], videoDir, testInfo,
+              combined ? 'off' : videoMode, artifacts);
+            if (combined) rmSync(videoDir, { recursive: true, force: true });
+          } else {
+            await attachScreenshotVideo(frames, framesDir, testInfo, videoMode, artifacts);
+          }
+          if (logs) await attachPageLogs(logs, testInfo, pageLogsMode);
         }
       } finally {
         rmSync(userDataDir, { recursive: true, force: true });
@@ -233,6 +285,88 @@ function requireExtensionBuild(args: {
 function resolveVideoMode(artifacts: WalletArtifactOptions, testInfo: TestInfo): ArtifactMode {
   const projectUse = (testInfo.project.use ?? {}) as Record<string, unknown>;
   return resolveArtifactMode(artifacts.video, projectUse.video, DEFAULT_ARTIFACT_MODES.video);
+}
+
+function resolvePageLogsMode(artifacts: WalletArtifactOptions, testInfo: TestInfo): ArtifactMode {
+  const projectUse = (testInfo.project.use ?? {}) as Record<string, unknown>;
+  return resolveArtifactMode(artifacts.pageLogs, projectUse.pageLogs, DEFAULT_PAGE_LOGS_MODE);
+}
+
+let warnedAboutFfmpeg = false;
+
+/**
+ * The video source for this test. Screenshots need FFmpeg to become a video; without it Chromium's
+ * recorder is used so the run still has footage, and the worker says so once.
+ */
+async function resolveVideoSourceOnce(artifacts: WalletArtifactOptions, videoMode: ArtifactMode): Promise<'screenshots' | 'chromium'> {
+  if (videoMode === 'off') return artifacts.videoSource ?? 'screenshots';
+  const { source, fallback } = resolveVideoSource(artifacts.videoSource, await ffmpegAvailable(artifacts.ffmpegPath));
+  if (fallback && !warnedAboutFfmpeg) {
+    warnedAboutFfmpeg = true;
+    console.warn(`[@wallets-e2e/core] videoSource 'screenshots' needs FFmpeg to encode its frames; ` +
+      `none was found${artifacts.ffmpegPath ? ` at ${artifacts.ffmpegPath}` : ' on PATH'}. ` +
+      `Falling back to Chromium's recorder, whose frames are cropped after a wallet popup.`);
+  }
+  return source;
+}
+
+/** Page logs of every page in the context, each line prefixed with the page it came from. */
+function collectContextLogs(context: BrowserContext): PageLogCollector {
+  const collectors = new Map<Page, PageLogCollector>();
+  const attach = (page: Page): void => {
+    if (!collectors.has(page)) collectors.set(page, collectPageLogs(page));
+  };
+  context.pages().forEach(attach);
+  context.on('page', attach);
+  return {
+    lines: () => [...collectors.entries()].flatMap(([page, collector]) => {
+      const where = roleOf(page.url()) === 'dapp' ? 'app' : roleOf(page.url());
+      return collector.lines().map((line) => `[${where}] ${line}`);
+    }),
+    stop: () => {
+      context.off('page', attach);
+      collectors.forEach((collector) => collector.stop());
+    },
+  };
+}
+
+async function attachPageLogs(logs: PageLogCollector, testInfo: TestInfo, mode: ArtifactMode): Promise<void> {
+  if (!shouldRetainArtifact(mode, testInfo.status, testInfo.expectedStatus)) return;
+  const lines = logs.lines();
+  if (lines.length === 0) return;
+  try {
+    await testInfo.attach('page-logs', { body: lines.join('\n') + '\n', contentType: 'text/plain' });
+  } catch (cause) {
+    debugArtifacts(`page logs not attached: ${describeCause(cause)}`);
+  }
+}
+
+/**
+ * Encodes the captured frames into the test's `video` attachment, or throws them away when the
+ * retention mode says this test is not worth one. A failed encode keeps the frames on disk, so
+ * the run can still be looked at, and says why.
+ */
+async function attachScreenshotVideo(
+  frames: FrameEntry[],
+  framesDir: string,
+  testInfo: TestInfo,
+  mode: ArtifactMode,
+  artifacts: WalletArtifactOptions,
+): Promise<void> {
+  if (mode === 'off') return;
+  if (frames.length === 0 || !shouldRetainArtifact(mode, testInfo.status, testInfo.expectedStatus)) {
+    rmSync(framesDir, { recursive: true, force: true });
+    return;
+  }
+  const output = testInfo.outputPath('video.mp4');
+  try {
+    await encodeScreenshotVideo(frames, framesDir, output, resolveScreenshotVideoOptions(artifacts.screenshotVideo), artifacts.ffmpegPath);
+    await testInfo.attach('video', { path: output, contentType: 'video/mp4' });
+    rmSync(framesDir, { recursive: true, force: true });
+  } catch (cause) {
+    console.warn(`[@wallets-e2e/core] Video not encoded; the frames are kept in ${framesDir}. ` +
+      `FFmpeg with libx264 is needed (artifacts.ffmpegPath). ${describeCause(cause)}`);
+  }
 }
 
 function resolveScreenshotMode(artifacts: WalletArtifactOptions, testInfo: TestInfo): ArtifactMode {

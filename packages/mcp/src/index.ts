@@ -10,6 +10,9 @@ import {
 import { existsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { GUIDES, readGuide } from '@wallets-e2e/knowledge';
+import { buildEvidenceSite } from '@wallets-e2e/evidence';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { discoverProjects, projectsRoot } from './projects.js';
 import {
   activeRun,
@@ -131,6 +134,13 @@ const TOOLS: Tool[] = [
           description:
             'Optional, default true. Embed up to four screenshots as images in the tool result.',
         },
+        evidence: {
+          type: 'boolean',
+          description:
+            'Optional, default false. Also build a static evidence site (index.html + media/ with every ' +
+            'test\'s video, screenshots and transaction links) and return its folder as `evidenceDir`. ' +
+            'It is a plain folder: open index.html, or deploy it as it is.',
+        },
       },
       required: ['runId'],
       additionalProperties: false,
@@ -228,12 +238,13 @@ function reportPayload(run: Run): Record<string, unknown> {
       instruction:
         'Give the human reviewer the HTML report, every video path, and representative screenshots. ' +
         'Prefer the attachment named "video" and show it directly when the client supports local ' +
-        'video playback; otherwise use the HTML report. Combined recording needs a core release ' +
-        'containing videoLayout and FFmpeg with libvpx; separate clips may indicate an older release, ' +
-        'an explicit separate layout, or a composition fallback. Check that the recording covers the ' +
-        'entire requested journey, including approval and deposit when requested. A passing run with no video of the ' +
-        'wallet or dapp is incomplete evidence — the reviewer must be able to watch the real popups ' +
-        'and on-chain flow.',
+        'video playback; otherwise use the HTML report, or call get_report with evidence: true for a ' +
+        'static site that holds everything in one page. The video is an mp4 built from screenshots of ' +
+        'the page in use (full frames; Chromium\'s own recorder crops the page once a wallet popup has ' +
+        'opened) and needs FFmpeg on the runner; a webm means the run used videoSource "chromium". ' +
+        'Check that the recording covers the entire requested journey, including approval and deposit ' +
+        'when requested. A passing run with no video of the wallet or dapp is incomplete evidence — the ' +
+        'reviewer must be able to watch the real popups and on-chain flow.',
       videos,
       screenshots,
       traces,
@@ -247,7 +258,7 @@ function str(args: Record<string, unknown>, key: string): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function handle(name: string, args: Record<string, unknown>): CallToolResult {
+async function handle(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
   switch (name) {
     case 'list_guides': {
       return json({
@@ -300,6 +311,21 @@ function handle(name: string, args: Record<string, unknown>): CallToolResult {
       if (!runId) return failure('`runId` is required.');
       const run = getRun(runId);
       const payload = reportPayload(run);
+      if (args.evidence === true && existsSync(run.jsonPath)) {
+        const out = join(tmpdir(), 'wallets-e2e-evidence', run.runId);
+        try {
+          const summary = await buildEvidenceSite({
+            reports: [run.jsonPath],
+            out,
+            testResults: [join(run.projectDir, 'test-results')],
+            title: `${run.projectId} evidence`,
+          });
+          payload.evidenceDir = out;
+          payload.evidence = summary;
+        } catch (error) {
+          payload.evidenceError = error instanceof Error ? error.message : String(error);
+        }
+      }
       const content: CallToolResult['content'] = [
         { type: 'text', text: JSON.stringify(payload, null, 2) },
       ];
@@ -389,7 +415,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const args = (request.params.arguments ?? {}) as Record<string, unknown>;
   try {
-    return handle(request.params.name, args);
+    return await handle(request.params.name, args);
   } catch (error) {
     // Returned as a tool result, not thrown: a protocol error surfaces as an opaque failure in
     // most clients, while this text reaches the model and tells it what to do differently.

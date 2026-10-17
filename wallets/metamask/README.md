@@ -62,8 +62,13 @@ WALLETS_E2E_PASSWORD=<strong local extension password>
 
 A `.env.wallet-e2e.local`, `.env.wallet-e2e` or `.env.local` in the directory you run Playwright
 from — or up to four directories above it — is read automatically, so `playwright test` needs no
-`--env-file` flag. Real environment variables always win over a file. Never put a funded seed phrase in a spec, report, video,
-or committed fixture.
+`--env-file` flag. A variable the environment already carries always wins over a file, even when it
+is empty, and an empty `KEY=` line in a file sets nothing. Never put a funded seed phrase in a
+spec, report, video, or committed fixture.
+
+After `connectToDapp`, a connect kit may raise one more prompt on its own — a network switch or
+chain add. `metamaskDriver.confirmFollowUpPrompt(context)` confirms it when it appears within 8 s
+and returns `false` otherwise, without opening anything itself.
 
 ## Usage
 

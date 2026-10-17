@@ -79,8 +79,9 @@ not a wallet timeout.
 ## Preferred fixture
 
 Use `createExtensionTest`; it creates a fresh temporary Chromium profile for each test, loads the
-extension, overrides the stock `context` and `page` fixtures, records every page, closes the context
-to flush videos, attaches them to the current test, and removes the temporary profile.
+extension, overrides the stock `context` and `page` fixtures, records the page in use from
+screenshots, closes the context, attaches the video, the screenshots and (on failure) the page
+logs to the current test, and removes the temporary profile.
 
 For MetaMask, use `createMetamaskTest`: it is `createExtensionTest` with the extension already
 resolved. `@wallets-e2e/metamask` ships its own pinned 13.13.1 build and downloads it on first use
@@ -95,6 +96,9 @@ export const test = createMetamaskTest({
   profilePrefix: 'my-dapp-wallet',
   // Prefer throw in CI. Use skip locally only when an absent extension is intentionally optional.
   onMissingExtension: process.env.CI ? 'throw' : 'skip',
+  // 'screenshots' (default) needs FFmpeg with libx264; 'chromium' is Playwright's recorder, which
+  // crops the page once a wallet has opened an approval as a second tab.
+  artifacts: { videoSource: 'screenshots', videoScope: 'app' },
 });
 
 export { expect } from '@playwright/test';
@@ -184,24 +188,48 @@ failure. `artifacts: { screenshot: ... }` beats both.
 Screenshots are named like recordings: `screenshot`, then `screenshot-wallet-approval` and
 `screenshot-wallet`, numbered when there is more than one of a kind.
 
-Combined recording is pending publication. Package consumption of this feature is blocked until
-a compatible core release containing it is published. Do not promise it from an earlier release.
-In that release, `createExtensionTest` defaults to `artifacts.videoLayout: 'combined'`: one `video`
-attachment follows app → wallet → app on a shared timeline, including repeated approvals and
-interactions in iframes. Blank and invisible extension worker pages are excluded. Install FFmpeg
-with the `libvpx` encoder on PATH in the consumer's workstation and CI, or select an executable
-through `artifacts.ffmpegPath`. Page start times are estimated; the video captures browser
-viewports without desktop chrome or audio. After approving a manually retained wallet tab, call
-the public Playwright `page.bringToFront()` on the app page to resume its view.
+### The video
 
-`artifacts.videoLayout: 'separate'` keeps individual page recordings. The fixture also falls back
-to this behavior, with a warning, if activity tracking or FFmpeg composition fails. The primary
-attachment is `video`, followed by `video-wallet-approval`, `video-wallet`, or `video-page`, with
-numbered suffixes for repeats. The idle wallet home recording is dropped unless it is the only
-recording or `artifacts.walletHomeVideo: true` was requested. That option affects separate mode
-only. Earlier published core releases use separate videos without the new layout options.
-Successful composition deletes intermediate page videos; failure-only retention deletes passing
-recordings. The wallet's visible home screenshot is kept independently of video layout.
+The `video` attachment is an mp4 built from CDP screenshots of the page in use, one every 200 ms,
+encoded with FFmpeg (`libx264`) after the context closes. That is the default
+(`artifacts.videoSource: 'screenshots'`) because Chromium's own recorder films the compositor
+surface, which stops covering the page once a wallet driver has opened an approval as a second tab
+of the same window: every later frame shows the top-left of the page with grey beside it while the
+page's own metrics still read the full viewport. `videoScope: 'app'` records the app only; `'all'`
+(default) also photographs the wallet's approval pages while the user is in them.
+`artifacts.screenshotVideo` tunes `intervalMs`, `quality`, `fps`, `crf` and `tailMs`. Without
+FFmpeg the fixture warns once and falls back to Chromium's recorder.
+
+`artifacts.videoSource: 'chromium'` keeps Playwright's per-page WebM recordings, composed app →
+wallet → app on an activity timeline (`libvpx`); `videoLayout: 'separate'` keeps them individual
+(`video`, `video-wallet-approval`, `video-wallet`, numbered for repeats; `walletHomeVideo: true`
+adds the idle home page). Failure-only retention never encodes a passing test's frames.
+
+### Page logs
+
+Console errors and warnings and uncaught errors of every page are attached as `page-logs` when a
+test fails (`artifacts.pageLogs`, default `'retain-on-failure'`); `WALLETS_E2E_DEBUG=1` echoes every
+message as it happens. Read them before blaming the wallet: a click that never reached it usually
+says why there.
+
+### Settling writes and the transaction probe
+
+`settleWrite({ probe, rpc, assertState, verifyReceipt? })` from `@wallets-e2e/core` is the loop
+every write needs: the hash from the app's probe, a successful receipt (a revert fails at once),
+optional receipt checks (`sponsoredUserOperation()` for ERC-4337 writes attaches
+`confirmed-aa-transaction`), then `assertState` polled until it holds. The probe is
+`createTxProbe(page, { testId, eventPrefix })`; the app implements the contract in a few lines: an
+element `<div data-testid="last-tx" data-status data-hash data-user-op-hash data-operator
+data-sponsored data-error aria-hidden>` updated on every transition, a `window` event
+`<prefix>:transaction` with the state as `detail`, and a listener for `<prefix>:clear-last-tx`.
+`probe.captureAll()` before an action records every transition in Node, so chained writes are all
+seen (`probe.waitForCaptured(n)`).
+
+### Env
+
+`requiredEnv`, `optionalEnv` (empty counts as unset) and `liveWritesEnabled(flag)` read the suite's
+variables; `.env.wallet-e2e.local`, `.env.wallet-e2e` and `.env.local` are loaded by the wallet
+package, a set variable is never overwritten and an empty `KEY=` line sets nothing.
 
 ## Generate and review evidence
 
@@ -227,6 +255,18 @@ Review at least:
 
 When handing off, link the exact report, primary video, representative successful and failed
 screenshots, trace, and a short Markdown summary containing commands and pass/fail/skip counts.
+
+For a page a reviewer can open or a team can deploy, build the evidence site from the JSON report
+(`PLAYWRIGHT_JSON_OUTPUT_NAME=report.json npx playwright test --reporter=list,html,json`):
+
+```bash
+npx wallets-e2e-evidence --report report.json --out evidence --test-results test-results \
+  --explorer-tx-url https://sepolia.basescan.org/tx/ --full-flow lifecycle.spec.ts --netlify
+```
+
+One `index.html` with totals, every spec and test with its video, screenshots and transaction links,
+`--full-flow` joining one spec's videos in run order, `--netlify` adding the deploy files. The MCP
+builds it with `get_report` `evidence: true`.
 
 ## CI artifact upload
 

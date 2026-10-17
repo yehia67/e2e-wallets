@@ -292,3 +292,37 @@ export async function clickTransactionConfirm(popup: Page): Promise<void> {
     `[wallets/metamask] Confirm stayed disabled (gas/RPC). UI:\n${(await popup.locator('body').innerText().catch(() => '')).slice(0, 400)}`,
   );
 }
+
+/**
+ * Confirms a prompt the wallet raised on its own after an action the driver already handled:
+ * the network switch or chain add an app's connect kit asks for right after connecting, a
+ * permission it requests next. Looks only at approval pages that are already open — never opens
+ * `notification.html` itself — and returns false when none shows a button within `timeoutMs`.
+ */
+export async function confirmFollowUpPrompt(
+  context: BrowserContext,
+  extensionId: string,
+  timeoutMs = 8_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const popup = context.pages().find((candidate) =>
+      !candidate.isClosed() && candidate.url().startsWith(`chrome-extension://${extensionId}/notification.html`));
+    if (popup) {
+      const approve = popup
+        .locator('[data-testid="confirmation-submit-button"]')
+        .or(popup.locator('[data-testid="confirm-footer-button"]'))
+        .or(popup.locator('.confirmation-footer__actions button.btn-primary'))
+        .or(popup.getByRole('button', { name: /^(switch network|approve|confirm)$/i }))
+        .first();
+      if (await approve.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        debugLog('confirmFollowUpPrompt: confirming a prompt the wallet raised on its own');
+        await approve.click();
+        await waitForApprovalToSettle(popup);
+        return true;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+}

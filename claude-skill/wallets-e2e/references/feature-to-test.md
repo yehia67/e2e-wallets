@@ -75,11 +75,13 @@ npx playwright show-report
 ```
 
 A pass without video of the wallet or dapp is incomplete evidence. The reviewer must be able to
-watch the real popups and on-chain flow. Prefer the primary attachment named `video`, displaying
-its absolute path through the client's local video player when available, or through the HTML
-report. A request to connect, approve, and deposit needs that complete journey in the recording;
-a connection-only clip is insufficient. Configure combined recording and FFmpeg using the
-`setup-and-reporting` guide, and report when separate recordings were produced instead.
+watch the real popups and on-chain flow. Prefer the primary attachment named `video` (an mp4 of
+full-size frames built from screenshots; a WebM means `videoSource: 'chromium'`), displaying its
+absolute path through the client's local video player when available, or through the HTML report,
+or build the evidence site (`get_report` with `evidence: true`, or `wallets-e2e-evidence`). A
+request to connect, approve, and deposit needs that complete journey in the recording; a
+connection-only clip is insufficient. Prove each write with `settleWrite` from `@wallets-e2e/core`
+(hash → receipt → state), never with the popup closing.
 
 `setup-and-reporting` covers the artifact configuration; `troubleshooting` maps common symptoms to
 causes.

@@ -16,8 +16,13 @@ npm install --save-dev @wallets-e2e/core @playwright/test
 
 ## What's exported
 
-- `launchContext({ extensionPath, userDataDir?, recordVideoDir?, headless? })` — the one place a persistent Chromium context with a wallet extension loaded gets created. Omit `recordVideoDir` and the context records nothing.
-- `createExtensionTest({ extensionPath, base?, artifacts?, profilePrefix?, extensionName?, buildCommand?, onMissingExtension? })` — a Playwright `test` whose `context` / `page` / `extensionContext` are a real extension-loaded persistent context, on a fresh temp profile that is cleaned up afterwards. The fixture attaches video and captures screenshots of visible pages; Playwright supplies the trace. Pass `base` to build on playwright-bdd's `test`.
+- `launchContext({ extensionPath, userDataDir?, recordVideoDir?, videoSize?, windowSize?, viewport?, headless? })` — the one place a persistent Chromium context with a wallet extension loaded gets created. Omit `recordVideoDir` and Chromium records nothing (the fixture records from screenshots instead).
+- `createExtensionTest({ extensionPath, base?, artifacts?, profilePrefix?, extensionName?, buildCommand?, onMissingExtension?, prepareExtension?, videoSize?, windowSize?, viewport? })` — a Playwright `test` whose `context` / `page` / `extensionContext` are a real extension-loaded persistent context, on a fresh temp profile that is cleaned up afterwards. The fixture records the video (`artifacts.videoSource`: `'screenshots'` by default, full frames encoded with FFmpeg; `'chromium'` composes Playwright's own recordings), captures screenshots of visible pages and attaches page logs; Playwright supplies the trace. Pass `base` to build on playwright-bdd's `test`.
+- `createTxProbe(page, { testId?, eventPrefix? })` — reads the app's transaction probe (`clear`, `read`, `waitForHash`, `captureAll`/`captured`/`waitForCaptured`); the contract is documented in the reports tutorial.
+- `settleWrite({ probe, rpc, assertState, verifyReceipt? })` — hash from the probe → successful receipt → optional receipt checks → the state polled until it holds. `waitForSuccessfulReceipt(rpc, hash)` alone refuses a revert.
+- `assertSponsoredUserOperation(rpc, { hash, userOpHash, operator }, { attach? })`, `sponsoredUserOperation()`, `verifySponsoredUserOperation`, `findUserOperationEvents` — ERC-4337 receipts: exactly one successful `UserOperationEvent` for the operation, sent by the operator, paid by a paymaster; attaches `confirmed-aa-transaction`.
+- `requiredEnv(name, hint?)`, `optionalEnv(name)`, `liveWritesEnabled(flag?)`, `loadEnvFiles()`, `parseEnvFile`, `findEnvFiles` — the env a wallet suite reads: `.env.wallet-e2e.local` / `.env.wallet-e2e` / `.env.local` searched upwards, a set variable never overwritten, an empty `KEY=` never set.
+- `collectPageLogs(page)`, `trackActivity(context, events)`, `buildConcatList`, `ffmpegEncodeArgs` — the recorder's parts, for a driver or a custom fixture.
 - `withWalletReporting(config)` — wraps a Playwright config with the list + unfiltered HTML reporters and the `video` / `screenshot` / `trace` modes, never overwriting anything you set yourself. Videos and screenshots are retained for passed and failed tests by default; traces remain failure-only.
 - `walletReporters({ outputFolder?, open? })` — just the reporter pair, for configs that assemble their own.
 - `ArtifactMode`, `WalletArtifactOptions`, `DEFAULT_ARTIFACT_MODES`, `ExtensionFixtures`, `CreateExtensionTestOptions` — the artifact retention vocabulary and the factory's option and fixture shapes.
@@ -38,11 +43,10 @@ npm install --save-dev @wallets-e2e/core @playwright/test
 
 ## Full docs
 
-Combined recording is pending publication; package consumption of this feature is blocked until
-a core release containing it is published. That release defaults to one chronological app → wallet
-→ app video. Install FFmpeg with the `libvpx` encoder on PATH, or set `artifacts.ffmpegPath`.
-Use `artifacts.videoLayout: 'separate'` for individual page videos. If composition fails, the
-fixture warns and retains separate recordings. Earlier releases use separate recordings.
+The video is built from screenshots by default (FFmpeg with `libx264` on PATH, or
+`artifacts.ffmpegPath`), because Chromium's own recorder crops the page once a wallet has opened an
+approval as a second tab. `artifacts.videoSource: 'chromium'` keeps that recorder, composed on one
+timeline (`libvpx`), with `videoLayout: 'separate'` for individual page videos.
 
 See the [package-consumer README](https://github.com/yehia67/e2e-wallets#readme),
 [quick-start tutorial](https://github.com/yehia67/e2e-wallets/blob/main/tutorials/quick-start.md), and

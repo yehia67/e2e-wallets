@@ -180,6 +180,15 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/evidence:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.7.5
+        version: 22.20.1
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
   packages/knowledge:
     devDependencies:
       '@types/node':
@@ -194,6 +203,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
+      '@wallets-e2e/evidence':
+        specifier: workspace:^
+        version: link:../evidence
       '@wallets-e2e/knowledge':
         specifier: workspace:^
         version: link:../knowledge

@@ -33,13 +33,17 @@ pnpm test            # `node --test` unit tests, then real Chromium windows driv
 
 If those don't get you to a passing test suite on a clean checkout, that's a bug in this project (or its docs) — please open an issue.
 
-## Contributor workflow: verify combined recording
+## Contributor workflow: verify recording
 
-Install Playwright Chromium and an FFmpeg executable with the `libvpx` encoder. The integration
-check packs core into a temporary application, imports its public package entrypoint, and runs
-Chromium with a small MV3 extension. It decodes the attached video to verify five app → wallet →
-app cycles, a reused wallet surface with iframe input, and exclusion of invisible worker pages.
-It also checks separate/off modes, passing and failing retention, and missing-encoder fallback.
+Install Playwright Chromium and an FFmpeg executable with the `libx264` and `libvpx` encoders. The
+integration check packs core into a temporary application, imports its public package entrypoint,
+and runs Chromium with a small MV3 extension. For `videoSource: 'chromium'` it decodes the attached
+video to verify five app → wallet → app cycles, a reused wallet surface with iframe input, and
+exclusion of invisible worker pages, plus separate/off modes, passing and failing retention and
+missing-encoder fallback. For the default source it checks that the mp4 is attached as `video`,
+that no frames leak, that failure-only retention encodes nothing for a pass, and — the case the
+default exists for — that a frame recorded after an approval tab opened in the same window is the
+full 1280×720 with no border (`cropdetect`).
 
 ```bash
 pnpm --filter @wallets-e2e/core build
@@ -51,9 +55,8 @@ node packages/core/scripts/check-recording.mjs
 
 Set `KEEP_RECORDING_CHECK=1` to retain the temporary report and recordings for visual review.
 This check verifies browser recording mechanics with a test extension; real MetaMask and Leather
-approval suites remain the adapter verification workflows. Publish a new core release before
-claiming that combined recording is available to package consumers; the MetaMask focus-restoration
-change also requires an adapter release. Refresh generated agent guides with `pnpm build:skill`.
+approval suites remain the adapter verification workflows. Refresh generated agent guides with
+`pnpm build:skill`.
 
 ## How the project is structured
 
@@ -76,34 +79,51 @@ Every wallet extension this project supports is driven the same way, through one
 - **`examples/spike`** holds the actual Playwright tests that exercise a driver end to end. **`examples/react-connect`** is a real dapp with a real `@stacks/connect` integration, and **`examples/bdd`** drives that same dapp from Gherkin `.feature` files through the step library in `packages/core/src/bdd/`.
 - **`packages/knowledge`** is the single source of truth for agent guides (`SKILL.md` + `references/`). `@wallets-e2e/mcp` serves them via `list_guides` / `get_guide`. `pnpm build:skill` copies them into `claude-skill/wallets-e2e/` and writes `claude-skill/wallets-e2e-skill-upload.zip` for Claude skill upload. Do not edit the generated copy.
 - **`packages/mcp`** is the MCP server any agent uses to run a consuming project's Playwright suite and collect video / screenshot artifacts.
+- **`packages/evidence`** turns a Playwright JSON report into a static evidence site (`wallets-e2e-evidence`); the MCP's `get_report` builds it with `evidence: true`. Zero dependencies, so the MCP can depend on it without pulling Playwright in.
 
 ## Publishing knowledge and MCP
 
-### Contributor workflow: publish the combined-video release
+### Contributor workflow: publish the screenshot-video release
 
-This release uses core `0.1.6`, MetaMask `0.1.5`, knowledge `0.1.7`, and MCP `0.1.7`.
-Build and pack these versions before publication, checking that the MetaMask tarball depends on
-core `^0.1.6` and the MCP tarball depends on knowledge `^0.1.7`. Pack with pnpm so workspace
-dependencies become registry-compatible ranges. The browser extension is not part of the package.
+This release uses core `0.2.0`, MetaMask `0.2.1`, evidence `0.1.0`, knowledge `0.1.9`, and MCP
+`0.2.1` (Leather stays at `0.1.4`). Build and pack these versions before publication, checking that
+the MetaMask tarball depends on core `^0.2.0` and the MCP tarball on knowledge `^0.1.9` and
+evidence `^0.1.0`. Pack with pnpm so workspace dependencies become registry-compatible ranges. The
+browser extension is not part of the package. Publish in dependency order: core, MetaMask,
+evidence, knowledge, MCP.
+
+`scripts/release.sh` runs every gate in order and stops at the first failure: toolchain, install,
+build, typecheck, the packages' unit tests, the recording check, both extension builds
+(`pnpm build:leather`, `pnpm build:metamask`), the fixture-wallet variables, then **every example
+suite for real** — a suite with a skipped test, a flaky test or nothing executed fails the gate,
+because a run that skipped proves nothing — then the skill build, pack and the tarball dependency
+ranges. It spends testnet funds and takes a while. `scripts/release.sh --publish` then publishes
+the tarballs in dependency order, skipping versions already on the registry; `--quick` runs only
+typecheck and unit tests and refuses to publish. By hand:
 
 ```bash
-pnpm --filter @wallets-e2e/core build
-pnpm --filter @wallets-e2e/metamask build
-pnpm --filter @wallets-e2e/knowledge build
-pnpm --filter @wallets-e2e/mcp build
+pnpm build
+pnpm test
+node packages/core/scripts/check-recording.mjs
 pnpm build:skill
 
 # Use a caller-selected temporary release directory and publish its inspected tarballs.
-pnpm --filter @wallets-e2e/core pack --pack-destination /tmp/wallets-e2e-video-release
-pnpm --filter @wallets-e2e/metamask pack --pack-destination /tmp/wallets-e2e-video-release
-pnpm --filter @wallets-e2e/knowledge pack --pack-destination /tmp/wallets-e2e-video-release
-pnpm --filter @wallets-e2e/mcp pack --pack-destination /tmp/wallets-e2e-video-release
+for pkg in core metamask evidence knowledge mcp; do
+  pnpm --filter @wallets-e2e/$pkg pack --pack-destination /tmp/wallets-e2e-release
+done
 
-npm publish /tmp/wallets-e2e-video-release/wallets-e2e-core-0.1.6.tgz --access public
-npm publish /tmp/wallets-e2e-video-release/wallets-e2e-metamask-0.1.5.tgz --access public
-npm publish /tmp/wallets-e2e-video-release/wallets-e2e-knowledge-0.1.7.tgz --access public
-npm publish /tmp/wallets-e2e-video-release/wallets-e2e-mcp-0.1.7.tgz --access public
+npm publish /tmp/wallets-e2e-release/wallets-e2e-core-0.2.0.tgz --access public
+npm publish /tmp/wallets-e2e-release/wallets-e2e-metamask-0.2.1.tgz --access public
+npm publish /tmp/wallets-e2e-release/wallets-e2e-evidence-0.1.0.tgz --access public
+npm publish /tmp/wallets-e2e-release/wallets-e2e-knowledge-0.1.9.tgz --access public
+npm publish /tmp/wallets-e2e-release/wallets-e2e-mcp-0.2.1.tgz --access public
 ```
+
+What this release changes for consumers: the default video is an mp4 built from screenshots
+(FFmpeg with `libx264` needed; `videoSource: 'chromium'` restores the WebM composition), a
+`page-logs` attachment on failure, `metamaskDriver.confirmFollowUpPrompt`, the env loader no longer
+overwrites a set-but-empty variable or sets `KEY=` lines, and core gains `createTxProbe`,
+`settleWrite`, `assertSponsoredUserOperation` and the env helpers.
 
 Publishing tarballs does not require Git mutations. After publication, check registry versions and
 dependencies, install the mutually compatible releases in a consuming application, and restart

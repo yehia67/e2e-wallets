@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Your coding agent builds the feature; a QA agent proves it with a real MetaMask or Leather wallet and hands you video plus screenshots for your demo.",
   "keywords": [
@@ -51,7 +51,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^3.25.0",
-    "@wallets-e2e/knowledge": "workspace:^"
+    "@wallets-e2e/knowledge": "workspace:^",
+    "@wallets-e2e/evidence": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
