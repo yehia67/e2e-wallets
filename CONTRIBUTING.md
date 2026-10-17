@@ -98,7 +98,10 @@ build, typecheck, the packages' unit tests, the recording check, both extension 
 suite for real** — a suite with a skipped test, a flaky test or nothing executed fails the gate,
 because a run that skipped proves nothing — then the skill build, pack and the tarball dependency
 ranges. It spends testnet funds and takes a while. `scripts/release.sh --publish` then publishes
-the tarballs in dependency order, skipping versions already on the registry; `--quick` runs only
+the tarballs in dependency order, skipping versions already on the registry, tags each package it
+published as `<name>-v<version>` on HEAD (annotated) and pushes those tags to `origin`
+(`--no-push` keeps them local). It refuses to publish from a dirty tree, so the tags point at what
+was published; `--quick` runs only
 typecheck and unit tests and refuses to publish; `--skip-gates` goes straight to pack, checks and
 publish, for use right after a full run passed in the same checkout. By hand:
 

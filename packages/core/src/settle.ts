@@ -10,7 +10,7 @@ export interface SettleWriteOptions {
   /** The on-chain (or UI) state the write must have produced. Retried until it holds or time runs out. */
   assertState: () => Promise<void>;
   /** Extra checks on the mined receipt, e.g. `sponsoredUserOperation()` for ERC-4337 writes. */
-  verifyReceipt?: (context: { hash: string; state: TxProbeState; rpc: EvmRpcRequester }) => Promise<void>;
+  verifyReceipt?: (context: { hash: string; state: TxProbeState; rpc: EvmRpcRequester; receipt: Receipt }) => Promise<void>;
   /** How long the hash may take to mine. Default 45 s. */
   receiptTimeoutMs?: number;
   /** How long `assertState` may keep failing. Default 90 s. */
@@ -26,7 +26,7 @@ export interface SettledWrite {
   state: TxProbeState;
 }
 
-interface Receipt {
+export interface Receipt {
   status: string;
   [field: string]: unknown;
 }
@@ -41,15 +41,26 @@ export async function waitForSuccessfulReceipt(
 ): Promise<Receipt> {
   const { timeoutMs = 45_000, pollMs = 1_500 } = options;
   const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
   while (Date.now() < deadline) {
-    const receipt = (await rpc.request({ method: 'eth_getTransactionReceipt', params: [hash] })) as Receipt | null;
+    let receipt: Receipt | null;
+    try {
+      receipt = (await rpc.request({ method: 'eth_getTransactionReceipt', params: [hash] })) as Receipt | null;
+    } catch (error) {
+      // A provider hiccup (rate limit, node switch) is not an answer about the transaction: retry
+      // until the deadline, and report the last error if it never answers.
+      lastError = error;
+      await sleep(pollMs);
+      continue;
+    }
     if (receipt?.status === '0x1') return receipt;
     if (receipt && receipt.status !== undefined && receipt.status !== null && receipt.status !== '0x1') {
       throw new Error(`Transaction ${hash} did not succeed: status ${receipt.status}.`);
     }
     await sleep(pollMs);
   }
-  throw new Error(`Transaction ${hash} was not mined within ${timeoutMs} ms.`);
+  throw new Error(`Transaction ${hash} was not mined within ${timeoutMs} ms.` +
+    (lastError instanceof Error ? ` Last RPC error: ${lastError.message}` : ''));
 }
 
 /**
@@ -68,8 +79,9 @@ export async function settleWrite(options: SettleWriteOptions): Promise<SettledW
 
   const hash = await probe.waitForHash({ timeoutMs: receiptTimeoutMs });
   const state = await probe.read();
-  await waitForSuccessfulReceipt(rpc, hash, { timeoutMs: receiptTimeoutMs });
-  if (verifyReceipt) await verifyReceipt({ hash, state, rpc });
+  const receipt = await waitForSuccessfulReceipt(rpc, hash, { timeoutMs: receiptTimeoutMs });
+  // The receipt is handed over rather than fetched again: one RPC round trip less to go wrong.
+  if (verifyReceipt) await verifyReceipt({ hash, state, rpc, receipt });
 
   const deadline = Date.now() + stateTimeoutMs;
   let lastError: unknown;

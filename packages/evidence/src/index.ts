@@ -127,11 +127,19 @@ function createSink(mediaDir: string, folders: ResultFolder[]): MediaSink & { co
 
 export async function buildEvidenceSite(options: BuildEvidenceSiteOptions): Promise<EvidenceSummary> {
   const { reports, out, testResults = [], title = 'Wallet E2E Evidence', ffmpegPath } = options;
+  // Read and parse every report before touching the output: a wrong path must leave the last
+  // site as it was, not an empty media folder.
+  const parsed = reports.map((file) => {
+    if (!existsSync(file)) throw new Error(`report not found: ${file}`);
+    try {
+      return JSON.parse(readFileSync(file, 'utf8')) as PlaywrightReport;
+    } catch (cause) {
+      throw new Error(`report is not Playwright JSON: ${file} (${cause instanceof Error ? cause.message : String(cause)})`);
+    }
+  });
   const mediaDir = join(out, 'media');
   rmSync(mediaDir, { recursive: true, force: true });
   mkdirSync(mediaDir, { recursive: true });
-
-  const parsed = reports.map((file) => JSON.parse(readFileSync(file, 'utf8')) as PlaywrightReport);
   const sink = createSink(mediaDir, resultFolders(testResults));
   const model: EvidenceModel = collectEvidence(parsed, sink);
 

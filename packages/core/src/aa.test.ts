@@ -124,6 +124,13 @@ describe('assertSponsoredUserOperation', () => {
     await assert.rejects(() => assertSponsoredUserOperation(rpc, EVIDENCE), /no receipt yet/);
   });
 
+  it('uses a receipt the caller already holds instead of fetching it', async () => {
+    const rpc = { request: async () => { throw new Error('must not be called'); } };
+    const { event } = await assertSponsoredUserOperation(rpc, EVIDENCE, { receipt: receipt() });
+    assert.equal(event.userOpHash, EVIDENCE.userOpHash);
+    await sponsoredUserOperation()({ hash: EVIDENCE.hash, state: { userOpHash: EVIDENCE.userOpHash, operator: EVIDENCE.operator }, rpc, receipt: receipt() });
+  });
+
   it('as a settleWrite verifier, reads the operation from the probe state', async () => {
     const rpc = { request: async () => receipt() };
     await sponsoredUserOperation()({ hash: EVIDENCE.hash, state: { userOpHash: EVIDENCE.userOpHash, operator: EVIDENCE.operator }, rpc });

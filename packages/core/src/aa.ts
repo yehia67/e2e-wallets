@@ -114,9 +114,11 @@ export interface AttachmentTarget {
 export async function assertSponsoredUserOperation(
   rpc: EvmRpcRequester,
   evidence: SponsoredUserOperationEvidence,
-  options: { entryPoint?: string; attach?: AttachmentTarget } = {},
+  options: { entryPoint?: string; attach?: AttachmentTarget; receipt?: EvmTransactionReceipt } = {},
 ): Promise<{ receipt: EvmTransactionReceipt; event: UserOperationEvent }> {
-  const receipt = (await rpc.request({ method: 'eth_getTransactionReceipt', params: [evidence.hash] })) as EvmTransactionReceipt | null;
+  // A receipt the caller already holds is used as it is; only a missing one is fetched.
+  const receipt = options.receipt ??
+    ((await rpc.request({ method: 'eth_getTransactionReceipt', params: [evidence.hash] })) as EvmTransactionReceipt | null);
   if (!receipt) throw new Error(`Transaction ${evidence.hash} has no receipt yet.`);
   const event = verifySponsoredUserOperation(receipt, evidence, options);
   if (options.attach) {
@@ -134,10 +136,10 @@ export async function assertSponsoredUserOperation(
  */
 export function sponsoredUserOperation(
   options: { entryPoint?: string; attach?: AttachmentTarget } = {},
-): (context: { hash: string; state: { userOpHash?: string; operator?: string }; rpc: EvmRpcRequester }) => Promise<void> {
-  return async ({ hash, state, rpc }) => {
+): (context: { hash: string; state: { userOpHash?: string; operator?: string }; rpc: EvmRpcRequester; receipt?: unknown }) => Promise<void> {
+  return async ({ hash, state, rpc, receipt }) => {
     await assertSponsoredUserOperation(rpc, {
       hash, userOpHash: state.userOpHash ?? '', operator: state.operator ?? '',
-    }, options);
+    }, { ...options, ...(receipt ? { receipt: receipt as EvmTransactionReceipt } : {}) });
   };
 }

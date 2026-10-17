@@ -15,6 +15,14 @@ describe('waitForSuccessfulReceipt', () => {
     assert.deepEqual(receipt, { status: '0x1' });
   });
 
+  it('retries through RPC errors and names the last one if the receipt never comes', async () => {
+    let calls = 0;
+    const flaky = { request: async () => { calls += 1; if (calls < 3) throw new Error('rate limited'); return { status: '0x1' }; } };
+    assert.deepEqual(await waitForSuccessfulReceipt(flaky, HASH, { pollMs: 1 }), { status: '0x1' });
+    const down = { request: async () => { throw new Error('node down'); } };
+    await assert.rejects(() => waitForSuccessfulReceipt(down, HASH, { timeoutMs: 5, pollMs: 1 }), /Last RPC error: node down/);
+  });
+
   it('fails at once on a reverted transaction and on a timeout', async () => {
     await assert.rejects(() => waitForSuccessfulReceipt(rpcAnswering([{ status: '0x0' }]), HASH, { pollMs: 1 }), /did not succeed: status 0x0/);
     await assert.rejects(() => waitForSuccessfulReceipt(rpcAnswering([null]), HASH, { timeoutMs: 5, pollMs: 1 }), /not mined within 5 ms/);
@@ -28,7 +36,7 @@ describe('settleWrite', () => {
     const settled = await settleWrite({
       probe,
       rpc: rpcAnswering([{ status: '0x1' }]),
-      verifyReceipt: async ({ hash, state: seen }) => { verified += 1; assert.equal(hash, HASH); assert.equal(seen.userOpHash, HASH); },
+      verifyReceipt: async ({ hash, state: seen, receipt }) => { verified += 1; assert.equal(hash, HASH); assert.equal(seen.userOpHash, HASH); assert.deepEqual(receipt, { status: '0x1' }); },
       assertState: async () => { attempts += 1; if (attempts < 3) throw new Error('not yet'); },
       statePollMs: 1,
     });

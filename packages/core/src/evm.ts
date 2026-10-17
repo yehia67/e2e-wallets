@@ -267,7 +267,15 @@ export function createInjectedEvmRpc(page: Page): EvmRpcRequester {
         if (!provider) {
           throw new Error('[packages/core] No injected window.ethereum provider found on the page.');
         }
-        return provider.request(requestArgs);
+        try {
+          return await provider.request(requestArgs);
+        } catch (cause) {
+          // EIP-1193 providers reject with a plain `{ code, message }` object, which crosses the
+          // page boundary as just "Object"; rethrow it as an Error that says what failed.
+          const { code, message } = (cause ?? {}) as { code?: unknown; message?: unknown };
+          throw new Error(`[packages/core] ${requestArgs.method} failed` +
+            `${code !== undefined ? ` (code ${String(code)})` : ''}: ${typeof message === 'string' ? message : String(cause)}`);
+        }
       }, args);
     },
   };

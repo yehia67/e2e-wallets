@@ -2,7 +2,9 @@
 # Verify the workspace end to end and, only when every gate passed, publish the packages.
 #
 #   scripts/release.sh            # every gate + pack + tarball checks; prints the publish commands
-#   scripts/release.sh --publish  # the same, then `npm publish` each tarball in dependency order
+#   scripts/release.sh --publish  # the same, then `npm publish` each tarball in dependency order,
+#                                 # tag each published package <name>-v<version> and push the tags
+#   scripts/release.sh --publish --no-push   # tag locally, do not push
 #   scripts/release.sh --quick    # unit tests and typecheck only: for iterating, never for a release
 #   scripts/release.sh --skip-gates [--publish]
 #                                 # pack, check and publish only: right after a full run passed in
@@ -20,12 +22,14 @@ cd "$(dirname "$0")/.."
 PUBLISH=0
 QUICK=0
 SKIP_GATES=0
+PUSH_TAGS=1
 for arg in "$@"; do
   case "$arg" in
     --publish) PUBLISH=1 ;;
+    --no-push) PUSH_TAGS=0 ;;
     --quick) QUICK=1 ;;
     --skip-gates) SKIP_GATES=1 ;;
-    -h|--help) sed -n 2,16p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,18p "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -62,6 +66,19 @@ if [ "$PUBLISH" -eq 1 ]; then
   # Checked before the long gate, not after it.
   npm whoami >/dev/null 2>&1 || fail "not logged in to npm (run: npm login, then npm whoami)"
   echo "npm user: $(npm whoami)"
+  # Tags mark the commit a version was published from, so that commit must be what is on disk.
+  [ -z "$(git status --porcelain)" ] || fail "uncommitted changes: commit first, so the release tags point at what is published"
+  if [ "$PUSH_TAGS" -eq 1 ]; then
+    git remote get-url origin >/dev/null 2>&1 || fail "no 'origin' remote to push tags to (use --no-push to tag locally)"
+  fi
+  for pkg in "${PACKAGES[@]}"; do
+    tag="$pkg-v$(version "$pkg")"
+    if git rev-parse -q --verify "refs/tags/$tag" >/dev/null && \
+       [ "$(git rev-list -n1 "$tag")" != "$(git rev-parse HEAD)" ] && \
+       ! npm view "@wallets-e2e/$pkg@$(version "$pkg")" version >/dev/null 2>&1; then
+      fail "tag $tag already exists on another commit but $pkg $(version "$pkg") is not published; bump the version"
+    fi
+  done
 fi
 
 if [ "$SKIP_GATES" -eq 1 ]; then
@@ -211,6 +228,7 @@ fi
 
 step "Publish"
 npm whoami >/dev/null 2>&1 || fail "not logged in to npm (run: npm login)"
+PUBLISHED=()
 for pkg in "${PACKAGES[@]}"; do
   v="$(version "$pkg")"
   if npm view "@wallets-e2e/$pkg@$v" version >/dev/null 2>&1; then
@@ -218,10 +236,37 @@ for pkg in "${PACKAGES[@]}"; do
     continue
   fi
   npm publish "$(tarball "$pkg")" --access public
+  PUBLISHED+=("$pkg")
   # Wait until the registry serves it, so the next package's dependency resolves.
   for _ in $(seq 1 30); do
     npm view "@wallets-e2e/$pkg@$v" version >/dev/null 2>&1 && break
     sleep 5
   done
 done
-printf '\n\033[32mPublished.\033[0m Now: git tag/commit the release, and switch T-REX-Dapp from file: links back to the registry versions.\n'
+if [ "${#PUBLISHED[@]}" -eq 0 ]; then
+  printf '\n\033[33mNothing new to publish: every version is already on the registry. No tags created.\033[0m\n'
+  exit 0
+fi
+
+step "Tag"
+# Only what this run published: an older version came from an older commit, and tagging HEAD for
+# it would point the tag at the wrong code.
+TAGS=()
+for pkg in "${PUBLISHED[@]}"; do
+  tag="$pkg-v$(version "$pkg")"
+  if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+    echo "tag $tag already exists; left as it is"
+  else
+    git tag -a "$tag" -m "@wallets-e2e/$pkg $(version "$pkg")"
+    echo "tagged $tag"
+  fi
+  TAGS+=("$tag")
+done
+if [ "$PUSH_TAGS" -eq 1 ]; then
+  git push origin "${TAGS[@]}"
+else
+  echo "not pushed (--no-push). Push with: git push origin ${TAGS[*]}"
+fi
+
+printf '\n\033[32mPublished and tagged:\033[0m %s\n' "${TAGS[*]}"
+echo "Next: bump the @wallets-e2e/* ranges in consuming apps (e.g. T-REX-Dapp) and reinstall."

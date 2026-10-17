@@ -1,6 +1,6 @@
 {
   "name": "@wallets-e2e/evidence",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Turns a Playwright JSON report of a wallet e2e run into a static evidence site: every spec and test with its video, screenshots and transaction links, ready to open or deploy.",
   "keywords": [
