@@ -21,11 +21,22 @@ export interface ActivityTracker {
   stop(): void;
 }
 
+const ACTIVITY_BINDING = '__walletsE2EVideoActivity';
+
+/** Per context, the trackers its one exposed binding reports to. */
+const activityListeners = new WeakMap<BrowserContext, Set<(page: Page) => void>>();
+
 /** Observe trusted interactions in every frame, including extension pages and reused popups. */
 function observeActivity(binding: string): void {
   const notify = (): void => {
-    const call = (window as unknown as Record<string, () => Promise<void>>)[binding];
-    void call().catch(() => undefined); // The context may be closing.
+    // A wallet's own pages run under LavaMoat, which throws on reading an unknown global. An
+    // uncaught exception there can break the wallet's approval screen, so nothing here may throw.
+    try {
+      const call = (window as unknown as Record<string, (() => Promise<void>) | undefined>)[binding];
+      if (typeof call === 'function') void call().catch(() => undefined); // The context may be closing.
+    } catch {
+      // Not observable in this page; the recorder falls back to the last page it saw.
+    }
   };
   for (const event of ['pointerdown', 'keydown', 'input', 'focus']) {
     window.addEventListener(event, (event) => {
@@ -83,13 +94,24 @@ export async function trackActivity(
   context.pages().forEach(track);
   try {
     if (observe) {
-      const binding = '__walletsE2EVideoActivity';
-      await context.exposeBinding(binding, ({ page }) => activate(page));
-      await context.addInitScript(observeActivity, binding);
-      // addInitScript covers future documents; existing pages need installing once now.
-      await Promise.all(context.pages().map((page) =>
-        page.evaluate(observeActivity, binding).catch(() => undefined),
-      ));
+      // A browser that outlives one test (`contextScope: 'worker'`) is tracked once per test, but a
+      // binding can be exposed only once per context: it is installed on first use and routes to
+      // the trackers listening at the moment.
+      let listeners = activityListeners.get(context);
+      if (listeners === undefined) {
+        listeners = new Set();
+        activityListeners.set(context, listeners);
+        const routed = listeners;
+        await context.exposeBinding(ACTIVITY_BINDING, ({ page }) => routed.forEach((listener) => listener(page)));
+        await context.addInitScript(observeActivity, ACTIVITY_BINDING);
+        // addInitScript covers future documents; existing pages need installing once now.
+        await Promise.all(context.pages().map((page) =>
+          page.evaluate(observeActivity, ACTIVITY_BINDING).catch(() => undefined),
+        ));
+      }
+      listeners.add(activate);
+      const registered = listeners;
+      cleanups.push(() => registered.delete(activate));
     }
   } catch (cause) {
     available = false;

@@ -257,10 +257,22 @@ export interface EvmRpcRequester {
  * Bridges a Playwright page to its injected `window.ethereum` provider. Calls run in the dapp, so
  * they use the exact chain and RPC MetaMask selected instead of a second public endpoint.
  */
+/**
+ * Whether a provider error is the node asking the caller to slow down: JSON-RPC `-32005` ("limit
+ * exceeded"), HTTP `429`, or a message that says so. Such a read is worth sending again; any other
+ * error is an answer.
+ */
+export function isRateLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\(code -32005\)|\(code 429\)|rate.?limit|too many requests/i.test(message);
+}
+
+/** Waits before each retry of a rate-limited read: 1 s, 2 s, 4 s, 8 s. */
+export const RATE_LIMIT_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000] as const;
+
 export function createInjectedEvmRpc(page: Page): EvmRpcRequester {
-  return {
-    async request(args: EvmRpcRequestArguments): Promise<unknown> {
-      return page.evaluate(async (requestArgs) => {
+  const send = (args: EvmRpcRequestArguments): Promise<unknown> =>
+      page.evaluate(async (requestArgs) => {
         const provider = (window as unknown as {
           ethereum?: { request(value: EvmRpcRequestArguments): Promise<unknown> };
         }).ethereum;
@@ -277,6 +289,20 @@ export function createInjectedEvmRpc(page: Page): EvmRpcRequester {
             `${code !== undefined ? ` (code ${String(code)})` : ''}: ${typeof message === 'string' ? message : String(cause)}`);
         }
       }, args);
+  return {
+    async request(args: EvmRpcRequestArguments): Promise<unknown> {
+      // A wallet's RPC is shared with everything else the browser asks, and a public node rate
+      // limits a burst of test reads. That is the node saying "later", not an answer: back off and
+      // ask again, and fail only when it keeps refusing.
+      for (const wait of RATE_LIMIT_BACKOFF_MS) {
+        try {
+          return await send(args);
+        } catch (error) {
+          if (!isRateLimitError(error)) throw error;
+          await new Promise((resolve) => setTimeout(resolve, wait));
+        }
+      }
+      return send(args);
     },
   };
 }

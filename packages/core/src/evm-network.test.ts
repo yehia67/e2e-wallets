@@ -7,6 +7,7 @@ import {
   chainIdToCaip,
   chainIdToHex,
   evmRpcCandidates,
+  isRateLimitError,
   probeEvmRpc,
   waitForEthTransactionMined,
   type EvmRpcRequester,
@@ -346,5 +347,14 @@ describe('waitForEthTransactionMined with an injected requester', () => {
 
   it('requires an explicit requester, network, or RPC URL', async () => {
     await assert.rejects(waitForEthTransactionMined(txHash), /needs an injected `requester`/);
+  });
+});
+
+describe('isRateLimitError', () => {
+  it('recognises a node asking to slow down, and nothing else', () => {
+    assert.ok(isRateLimitError(new Error('[packages/core] eth_call failed (code -32005): Request is being rate limited.')));
+    assert.ok(isRateLimitError(new Error('eth_call failed (code 429): Too Many Requests')));
+    assert.ok(!isRateLimitError(new Error('eth_call failed (code 3): execution reverted')));
+    assert.ok(!isRateLimitError(new Error('[packages/core] No injected window.ethereum provider found on the page.')));
   });
 });

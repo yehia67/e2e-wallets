@@ -77,7 +77,8 @@ export async function verifyUnlockedAddress(
 
   const accountMenu = page.locator('[data-testid="account-options-menu-button"]');
   if (await accountMenu.isVisible({ timeout: 2_000 }).catch(() => false)) {
-    await accountMenu.click();
+    // MetaMask's notification badge sits over this button; a plain click waits on it forever.
+    await accountMenu.click({ force: true, timeout: 5_000 }).catch(() => {});
     const details = page.locator('[data-testid="account-list-menu-details"]');
     if (await details.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await details.click();

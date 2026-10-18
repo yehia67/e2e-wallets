@@ -86,15 +86,31 @@ export async function fillImportSrp(page: Page, seedPhrase: string): Promise<voi
   }
 }
 
+/** Whether MetaMask's own storage already holds `address`, i.e. this profile imported the wallet. */
+async function storageHoldsAddress(context: BrowserContext, address: string): Promise<boolean> {
+  let [worker] = context.serviceWorkers();
+  if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 10_000 }).catch(() => undefined as never);
+  if (!worker) return false;
+  try {
+    const storage = (await worker.evaluate(() => chrome.storage.local.get(null))) as Record<string, unknown>;
+    return JSON.stringify(storage).toLowerCase().includes(address.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 /**
  * True when the wallet at `home.html` is already set up: unlocked, or unlocked here with the
  * fixture password. False on a fresh profile, where onboarding is the only way forward.
  */
-async function unlockIfOnboarded(page: Page, extensionId: string): Promise<boolean> {
+async function unlockIfOnboarded(context: BrowserContext, page: Page, extensionId: string): Promise<boolean> {
+  // Asked of the wallet's storage, not of the page: a fresh profile renders the home shell for a
+  // moment before MetaMask redirects it to onboarding, so a visible home proves nothing. Only a
+  // wallet that holds the fixture address has been onboarded.
+  if (!(await storageHoldsAddress(context, wallet.address))) return false;
   const home = page.locator(HOME_SELECTOR).first();
   const unlock = page.locator('[data-testid="unlock-password"]');
-  const onboarding = page.locator('[data-testid="onboarding-import-wallet"]');
-  await home.or(unlock).or(onboarding).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
+  await home.or(unlock).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
   if (await home.isVisible().catch(() => false)) return true;
   if (!(await unlock.isVisible().catch(() => false))) return false;
   await unlock.fill(wallet.password);
@@ -114,7 +130,7 @@ export async function importWallet(context: BrowserContext, seedPhrase: string):
 
   // A browser that outlives one test (`contextScope: 'worker'`) arrives here already onboarded:
   // the home page, or the lock screen if the wallet locked itself. Neither needs the seed again.
-  if (await unlockIfOnboarded(page, extensionId)) {
+  if (await unlockIfOnboarded(context, page, extensionId)) {
     await verifyUnlockedAddress(context, page, extensionId, wallet.address);
     return { address: wallet.address };
   }
