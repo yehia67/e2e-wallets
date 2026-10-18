@@ -104,6 +104,15 @@ export const test = createMetamaskTest({
 export { expect } from '@playwright/test';
 ```
 
+By default every test launches its own Chromium and profile, so each one imports the wallet,
+picks its network and connects again — about half a minute before the test's own work starts.
+A suite of many short tests on one wallet passes `contextScope: 'worker'`: one browser per
+worker, the wallet imported and on its network once, the dapp session restored on each test's
+new page. Tests still get their own page, video, screenshots and page logs, and the pages a test
+opened are closed when it ends. The dapp-side connect helper then has to accept a session the
+browser restored (the connected address already shown) as well as a fresh one. MetaMask's
+`importWallet` and `switchNetwork` are idempotent, so a test may keep calling them.
+
 For Leather, or for a build of your own, name the directory holding `manifest.json` yourself:
 
 ```ts

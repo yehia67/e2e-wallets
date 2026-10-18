@@ -12,7 +12,7 @@ import {
   type TestInfo,
   type TestType,
 } from '@playwright/test';
-import { launchContext } from '../context.js';
+import { launchContext, type LaunchContextOptions } from '../context.js';
 import {
   DEFAULT_ARTIFACT_MODES,
   DEFAULT_PAGE_LOGS_MODE,
@@ -37,6 +37,7 @@ import { orderVideoEntriesForAttachment } from './video-order.js';
 import { trackVideos, type TrackedVideo } from './video-recorder.js';
 import { composeVideo } from './video-composition.js';
 import type { VideoSegment } from './video-timeline.js';
+import { pagesToCloseAfterTest } from './worker-context.js';
 
 export * from './artifacts.js';
 export { collectPageLogs, type PageLogCollector } from './page-logs.js';
@@ -63,6 +64,23 @@ export interface ExtensionFixtures {
   extensionContext: BrowserContext;
 }
 
+/**
+ * The browser a worker keeps across its tests under `contextScope: 'worker'`. Launched by the first
+ * test that needs it — after that test's own extension checks have run — and closed with the worker.
+ */
+export interface WorkerBrowserSlot {
+  launch(options: LaunchContextOptions): Promise<BrowserContext>;
+  current(): BrowserContext | undefined;
+}
+
+/** Worker-scoped fixtures `createExtensionTest` adds. */
+export interface ExtensionWorkerFixtures {
+  walletWorkerBrowser: WorkerBrowserSlot;
+}
+
+/** How long one extension-loaded browser lives. */
+export type ContextScope = 'test' | 'worker';
+
 type AnyTestArgs = PlaywrightTestArgs & PlaywrightTestOptions;
 type AnyWorkerArgs = PlaywrightWorkerArgs & PlaywrightWorkerOptions;
 
@@ -75,6 +93,19 @@ export interface CreateExtensionTestOptions<
   base?: TBase;
   /** Prefix for the per-test temporary Chromium profile directory. Defaults to `'wallets-e2e'`. */
   profilePrefix?: string;
+  /**
+   * `'test'` (default): every test launches its own Chromium with a fresh profile, so each one
+   * imports the wallet, picks its network and connects again — around half a minute per test
+   * before the test's own work starts, and no state can leak between tests.
+   *
+   * `'worker'`: one Chromium and one profile per worker, shared by its tests in order. The wallet
+   * stays imported, unlocked and on its network, and a dapp session the browser remembers is
+   * restored on the next test's page. Each test still gets its own page, video, screenshots and
+   * page logs; the pages a test opened are closed when it ends. Wallet drivers must then make
+   * import and network selection idempotent, as `@wallets-e2e/metamask` does. The video comes from
+   * screenshots in this mode: Chromium's per-page recordings cannot be cut per test.
+   */
+  contextScope?: ContextScope;
   /** Runs headed unless overridden, matching `launchContext` (AD-6). */
   headless?: boolean;
   /** Video/screenshot retention overrides and video composition options. Trace uses `use.trace`. */
@@ -129,9 +160,41 @@ export function createExtensionTest<
     videoSize,
     windowSize,
     viewport,
+    contextScope = 'test',
   } = options;
 
-  return (base as TestType<TArgs, TWorkerArgs>).extend<ExtensionFixtures>({
+  return (base as TestType<TArgs, TWorkerArgs>).extend<ExtensionFixtures, ExtensionWorkerFixtures>({
+    // Under `contextScope: 'worker'`, the one browser the worker's tests share. A slot rather than
+    // the context itself, so the launch waits for the first test's extension checks and a worker
+    // whose tests all skip never starts a browser.
+    walletWorkerBrowser: [
+      async ({}: Record<string, never>, use: (slot: WorkerBrowserSlot) => Promise<void>, workerInfo: { workerIndex: number }) => {
+        let context: BrowserContext | undefined;
+        let userDataDir: string | undefined;
+        const slot: WorkerBrowserSlot = {
+          async launch(launchOptions) {
+            if (!context) {
+              userDataDir = mkdtempSync(join(tmpdir(), `${profilePrefix}-worker${workerInfo.workerIndex}-`));
+              context = await launchContext({ ...launchOptions, userDataDir });
+            }
+            return context;
+          },
+          current: () => context,
+        };
+        try {
+          await use(slot);
+        } finally {
+          try {
+            await context?.close();
+          } catch {
+            // Already gone; nothing left to release.
+          }
+          if (userDataDir) rmSync(userDataDir, { recursive: true, force: true });
+        }
+      },
+      { scope: 'worker' },
+    ],
+
     // Playwright drives its own tracing and screenshots off these two worker options, for
     // hand-launched persistent contexts as much as for its own. Restated here so the package
     // defaults apply without `withWalletReporting`; `use.trace`/`use.screenshot` still override.
@@ -145,7 +208,7 @@ export function createExtensionTest<
     // The built-in `context` name is overridden so bdd steps that read the stock `context`/`page`
     // drive an extension context without knowing about extensions.
     context: async (
-      {}: Record<string, never>,
+      { walletWorkerBrowser }: { walletWorkerBrowser: WorkerBrowserSlot },
       use: (context: BrowserContext) => Promise<void>,
       testInfo: TestInfo,
     ) => {
@@ -158,11 +221,41 @@ export function createExtensionTest<
 
       const videoMode = resolveVideoMode(artifacts, testInfo);
       const source = await resolveVideoSourceOnce(artifacts, videoMode);
-      const userDataDir = mkdtempSync(join(tmpdir(), `${profilePrefix}-${testInfo.testId}-`));
       const videoDir = testInfo.outputPath('videos');
       const framesDir = testInfo.outputPath('video-frames');
       const pageLogsMode = resolvePageLogsMode(artifacts, testInfo);
 
+      if (contextScope === 'worker') {
+        // The worker's browser, borrowed for this test and handed back with this test's pages closed.
+        const context = await walletWorkerBrowser.launch({ extensionPath, headless, videoSize, windowSize, viewport });
+        const openedBefore = new Set(context.pages());
+        const logs = pageLogsMode === 'off' ? undefined : collectContextLogs(context);
+        let recorder: ScreenshotRecorder | undefined;
+        try {
+          if (videoMode !== 'off') {
+            if (source === 'chromium') warnWorkerScopeRecordsScreenshots();
+            recorder = await startScreenshotRecorder(context, {
+              framesDir,
+              options: resolveScreenshotVideoOptions(artifacts.screenshotVideo),
+              scope: artifacts.videoScope ?? 'all',
+              debug: debugArtifacts,
+            });
+          }
+          await use(context);
+        } finally {
+          const frames = (await recorder?.stop()) ?? [];
+          await attachScreenshots(context, testInfo, resolveScreenshotMode(artifacts, testInfo));
+          logs?.stop();
+          await Promise.all(
+            pagesToCloseAfterTest(openedBefore, context.pages(), isNonVisualPageUrl).map((page) => page.close().catch(() => undefined)),
+          );
+          await attachScreenshotVideo(frames, framesDir, testInfo, videoMode, artifacts);
+          if (logs) await attachPageLogs(logs, testInfo, pageLogsMode);
+        }
+        return;
+      }
+
+      const userDataDir = mkdtempSync(join(tmpdir(), `${profilePrefix}-${testInfo.testId}-`));
       try {
         const context = await launchContext({
           extensionPath,
@@ -293,6 +386,14 @@ function resolvePageLogsMode(artifacts: WalletArtifactOptions, testInfo: TestInf
 }
 
 let warnedAboutFfmpeg = false;
+let warnedAboutWorkerVideo = false;
+
+function warnWorkerScopeRecordsScreenshots(): void {
+  if (warnedAboutWorkerVideo) return;
+  warnedAboutWorkerVideo = true;
+  console.warn(`[@wallets-e2e/core] contextScope 'worker' records the video from screenshots: ` +
+    `Chromium's per-page recordings span the whole worker and cannot be cut per test.`);
+}
 
 /**
  * The video source for this test. Screenshots need FFmpeg to become a video; without it Chromium's

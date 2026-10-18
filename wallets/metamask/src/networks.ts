@@ -19,6 +19,13 @@ interface PendingDappNetwork {
 
 const pendingDappNetworks = new WeakMap<BrowserContext, PendingDappNetwork>();
 
+/**
+ * The chain each browser was last pointed at. `ensureNetwork` is asked once per test, and under
+ * `contextScope: 'worker'` the browser remembers the answer from the test before — the RPC probe,
+ * the settings pages and the picker would all be repeated for nothing.
+ */
+const selectedNetworks = new WeakMap<BrowserContext, number>();
+
 async function openManageNetworks(page: Page): Promise<void> {
   await page.locator('[data-testid="sort-by-networks"]').click({ timeout: 15_000 });
   await page.locator('[data-testid="home-network-filter-all-default"]').waitFor({
@@ -315,6 +322,12 @@ async function selectFromHomePicker(page: Page, network: EvmNetwork): Promise<vo
 }
 
 export async function ensureNetwork(context: BrowserContext, network: EvmNetwork): Promise<void> {
+  if (selectedNetworks.get(context) === network.chainId) return;
+  await selectNetwork(context, network);
+  selectedNetworks.set(context, network.chainId);
+}
+
+async function selectNetwork(context: BrowserContext, network: EvmNetwork): Promise<void> {
   const { page, extensionId } = await getUnlockedHomePage(context);
 
   const explicitOverride =

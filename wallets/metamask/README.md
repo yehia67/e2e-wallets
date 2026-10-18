@@ -78,7 +78,7 @@ import { createMetamaskTest, metamaskDriver } from '@wallets-e2e/metamask';
 import { expect } from '@playwright/test';
 
 // The extension, its version and the "not prepared" message are already wired up.
-// Everything createExtensionTest accepts — profilePrefix, headless, artifacts — is forwarded.
+// Everything createExtensionTest accepts — profilePrefix, headless, artifacts, contextScope — is forwarded.
 const test = createMetamaskTest();
 
 test('connects on the selected network', async ({ extensionContext: context, page }) => {

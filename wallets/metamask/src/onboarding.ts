@@ -86,6 +86,24 @@ export async function fillImportSrp(page: Page, seedPhrase: string): Promise<voi
   }
 }
 
+/**
+ * True when the wallet at `home.html` is already set up: unlocked, or unlocked here with the
+ * fixture password. False on a fresh profile, where onboarding is the only way forward.
+ */
+async function unlockIfOnboarded(page: Page, extensionId: string): Promise<boolean> {
+  const home = page.locator(HOME_SELECTOR).first();
+  const unlock = page.locator('[data-testid="unlock-password"]');
+  const onboarding = page.locator('[data-testid="onboarding-import-wallet"]');
+  await home.or(unlock).or(onboarding).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
+  if (await home.isVisible().catch(() => false)) return true;
+  if (!(await unlock.isVisible().catch(() => false))) return false;
+  await unlock.fill(wallet.password);
+  await page.locator('[data-testid="unlock-submit"]').click();
+  await page.goto(`chrome-extension://${extensionId}/home.html`);
+  await home.waitFor({ state: 'visible', timeout: 45_000 });
+  return true;
+}
+
 export async function importWallet(context: BrowserContext, seedPhrase: string): Promise<WalletAccount> {
   const trimmed = seedPhrase.trim();
   if (!trimmed) {
@@ -93,6 +111,13 @@ export async function importWallet(context: BrowserContext, seedPhrase: string):
   }
 
   const { page, extensionId } = await openOnboardingPage(context);
+
+  // A browser that outlives one test (`contextScope: 'worker'`) arrives here already onboarded:
+  // the home page, or the lock screen if the wallet locked itself. Neither needs the seed again.
+  if (await unlockIfOnboarded(page, extensionId)) {
+    await verifyUnlockedAddress(context, page, extensionId, wallet.address);
+    return { address: wallet.address };
+  }
 
   await page.locator('[data-testid="onboarding-import-wallet"]').click({ timeout: 15_000 });
   await page.locator('[data-testid="onboarding-import-with-srp-button"]').click();
