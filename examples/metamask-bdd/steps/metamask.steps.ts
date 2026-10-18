@@ -92,7 +92,12 @@ Then('the EVM transaction is mined', async ({ page }) => {
   if (!rpcRequester) {
     throw new Error('Injected RPC requester missing — connect MetaMask before waiting for a receipt.');
   }
-  const status = await page.getByTestId('deposit-status').innerText();
+  // The popup closes before the dapp hears back from the provider: `eth_sendTransaction` resolves
+  // with the hash a moment after MetaMask has broadcast, and a single read in that moment sees
+  // `approve-pending`. Wait for the hash, as a user watching the page would.
+  const deposit = page.getByTestId('deposit-status');
+  await expect(deposit).toHaveText(/(?:approve|deposit|permit-deposit)-tx:0x[0-9a-f]{64}/i, { timeout: 60_000 });
+  const status = await deposit.innerText();
   const txHash = status.match(/(?:approve|deposit|permit-deposit)-tx:(0x[0-9a-f]{64})/i)?.[1];
   if (!txHash) {
     throw new Error(`Expected an EVM transaction hash in deposit status, got: ${status}`);
